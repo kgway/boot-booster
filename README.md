@@ -1,7 +1,5 @@
 # Boot Booster
 
-[日本語](README.ja.md)
-
 Faster startup for Android Obsidian vaults with many notes.
 
 **Android only: Obsidian API 1.13.8 / 1.14.4.** Desktop and iOS are not accelerated. Other Android versions use normal startup.
