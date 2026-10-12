@@ -11,6 +11,4 @@
 .boot-booster-record-json[open] > textarea { margin-top: var(--size-4-2); }
 .boot-booster-measurements { border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .boot-booster-measurements th, .boot-booster-measurements td { padding: var(--size-4-2); text-align: left; white-space: nowrap; }
-.boot-booster-fast-tabs .mobile-tab-preview-embed { display: none !important; }
-.boot-booster-fast-tabs .mobile-tab-preview-empty { display: flex !important; }
 .boot-booster-fast-tabs .mobile-tab-preview { height: 72px; }

@@ -1,6 +1,6 @@
 # Boot Booster — ローカル試用候補
 
-このZIPは非公開開発中の試用候補です。版は `manifest.json` で確認できます。
+このZIPは正式公開前の試用候補です。版は `manifest.json` で確認できます。
 型検査・公式lint・自動テスト・再ビルド一致を確認して作成します。合成Vaultでの検証範囲は公開ソースの `docs/testing.md` と候補記録に記載しています。実機での短縮量は利用環境に依存します。
 
 ## 導入・更新
@@ -15,6 +15,11 @@
 設定・通知・コマンドは日本語と英語に対応しています。Obsidianが日本語なら日本語、それ以外なら英語が初期表示です。「言語」で切り替えると即時反映し、この端末だけに保存します。
 
 ## 今回確認すること
+
+- 1.14.5では「タブプレビューの省略」をオンにして再起動し、タブ一覧にタイトルとアイコンが表示されることを確認してください。オフにして再起動すると標準の画像表示に戻ります。
+- 起動時に選ばれるノートと、タブ一覧から開くノートが従来どおりであることを確認してください。
+
+## そのほかの機能
 
 - プログラムのファイルサイズが大きいプラグインも普段どおり起動し、設定・ノート・タブの状態を保持する。
 - 起動直後の入力、ノート切替、標準の画像付きタブ一覧が使える。
@@ -41,11 +46,13 @@
 Obsidianを終了し、バックアップの本体3ファイルを戻します。`data.json` は保持します。
 一覧照合に失敗する場合は「ファイル一覧の高速化」を「使わない」にして再起動すると通常読み取りに戻せます。
 プラグイン本体の高速読み取りだけを止める場合も、設定をオフにして再起動してください。
-ライセンスはMIT、作者表記はkgwayです。コミュニティでの配布は準備中です。
+ライセンスはMIT、作者表記はkgwayです。正式版はコミュニティ一覧から入手できます。
 
 ## English quick guide
 
-Close Obsidian and back up your vault before installing. Extract `boot-booster` into `.obsidian/plugins/`. When updating, replace only `main.js`, `manifest.json` and `styles.css`, keeping `data.json`. Enable Boot Booster after reopening Obsidian. This is a private trial candidate; community publication is being prepared.
+Close Obsidian and back up your vault before installing. Extract `boot-booster` into `.obsidian/plugins/`. When updating, replace only `main.js`, `manifest.json` and `styles.css`, keeping `data.json`. Enable Boot Booster after reopening Obsidian. This is a trial candidate; the stable release is available in Community plugins.
+
+For 1.14.5, turn on Skip tab previews and restart. Check that the tab overview shows titles and icons. Turn the option off and restart to restore normal previews. Check that the selected note and tab selection behave as before.
 
 Android file-list optimization supports Obsidian API 1.13.8 / 1.14.4. The first startup builds a reference inventory. The interface starts in Japanese when Obsidian uses Japanese, and in English otherwise. The Language dropdown switches it immediately and saves the preference on this device.
 
