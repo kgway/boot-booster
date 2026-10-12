@@ -1,5 +1,11 @@
 # Testing
 
+## Compatibility
+
+Startup optimization is enabled only on Android Obsidian API 1.13.8 and 1.14.4. Desktop and iOS are not accelerated; other Android versions use normal startup. The allowlist is maintained in `src/compatibility.ts`, and the platform checks are applied before optimization hooks are installed.
+
+## Validation
+
 Run `pnpm check`, `pnpm test` and `pnpm build` with the pinned dependencies. Tests use synthetic files and mocked host interfaces; they do not open a personal vault.
 
 The official Obsidian ESLint configuration runs through `pnpm lint` and `pnpm lint:review`. Both reject all errors and warnings. Candidate creation runs the same check. Neither local lint nor CI replaces the directory's own review.

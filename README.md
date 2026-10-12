@@ -1,14 +1,14 @@
 # Boot Booster
 
-Faster startup for Android Obsidian vaults with many notes.
+**Less waiting. Faster access to your notes.**
 
-**Android only: Obsidian API 1.13.8 / 1.14.4.** Desktop and iOS are not accelerated. Other Android versions use normal startup.
+Boot Booster cuts startup work in large Android vaults so you can get to your notes sooner.
 
 ## Features
 
-- Reuse the saved file list and verify changes in the background.
-- Reduce workspace restoration work and speed up reads of large plugin program files.
-- Show verification progress and local startup records. Japanese and English UI.
+- Open your vault sooner by reusing its saved file list.
+- Cut work from workspace restoration and large plugin file reads.
+- Follow background verification and compare local startup times.
 
 ## How it works
 
@@ -16,7 +16,7 @@ The first startup records a file inventory. Later startups can use it provisiona
 
 The plugin uses internal Obsidian APIs. Note contents are not cached. Inventories and startup records stay on this device; file reading contacts only localhost. No external data transmission or self-updates.
 
-Search and query results may be incomplete during verification. If verification fails, set **File list optimization** to **Off** and restart. External apps' writes are not locked. Startup timings are observations, not predictions. See [testing and limitations](docs/testing.md).
+Search and query results may be incomplete during verification. If verification fails, set **File list optimization** to **Off** and restart. External apps' writes are not locked. Startup timings are observations, not predictions. See [compatibility and testing](docs/testing.md#compatibility).
 
 ## Install
 
