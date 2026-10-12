@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.5
+
+- Lightweight tab previews use Obsidian's native placeholder handling instead of CSS `!important` overrides. Normal image loading is restored when the option is disabled or the plugin unloads.
+- CSS checks now reject `!important` before release builds.
+
 ## 1.14.4
 
 First public release. Earlier entries describe development versions.
