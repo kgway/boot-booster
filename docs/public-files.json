@@ -1,0 +1,13 @@
+{
+  "files": [
+    ".gitattributes", ".gitignore", ".github/workflows/check.yml", ".github/workflows/release-build.yml",
+    "README.md", "README.ja.md", "README.en.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
+    "manifest.json", "versions.json", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
+    "tsconfig.json", "esbuild.config.mjs", "eslint.config.mjs", "styles.css",
+    "docs/test.cjs", "docs/check-text.cjs", "docs/editing-text.md", "docs/testing.md",
+    "docs/candidate-core.cjs", "docs/prepare-candidate.mjs", "docs/candidate-install.md",
+    "docs/package.ps1", "docs/package-release.py", "docs/check-release.cjs",
+    "docs/export-public.mjs", "docs/public-files.json", "docs/lint.cjs", "docs/verify-release.mjs", "docs/releasing.md"
+  ],
+  "directories": ["src", "tests"]
+}

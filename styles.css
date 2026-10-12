@@ -1,0 +1,16 @@
+.boot-booster-report { width: 100%; font-family: var(--font-monospace); }
+.boot-booster-history .setting-item-info, .boot-booster-status .setting-item-info { min-width: 0; width: 100%; }
+.boot-booster-status [hidden], .boot-booster-record-section [hidden] { display: none; }
+.boot-booster-folders { display: flex; flex-wrap: wrap; gap: var(--size-4-2); }
+.boot-booster-folder { display: inline-flex; align-items: center; gap: var(--size-4-1); max-width: 100%; }
+.boot-booster-folder > span { overflow-wrap: anywhere; min-width: 0; }
+.boot-booster-record-section { scroll-margin-top: 88px; }
+.boot-booster-records { max-width: 100%; overflow-x: auto; margin-top: var(--size-4-3); }
+.boot-booster-history .setting-item-control { justify-content: flex-start; margin-block: var(--size-4-3); }
+.boot-booster-history .boot-booster-records + a { display: inline-block; margin-top: var(--size-4-2); }
+.boot-booster-record-json[open] > textarea { margin-top: var(--size-4-2); }
+.boot-booster-measurements { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.boot-booster-measurements th, .boot-booster-measurements td { padding: var(--size-4-2); text-align: left; white-space: nowrap; }
+.boot-booster-fast-tabs .mobile-tab-preview-embed { display: none !important; }
+.boot-booster-fast-tabs .mobile-tab-preview-empty { display: flex !important; }
+.boot-booster-fast-tabs .mobile-tab-preview { height: 72px; }

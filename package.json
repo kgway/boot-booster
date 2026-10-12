@@ -1,0 +1,25 @@
+{
+  "name": "boot-booster",
+  "version": "1.14.4",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "test": "node docs/test.cjs",
+    "check": "tsc --noEmit",
+    "candidate": "node docs/prepare-candidate.mjs",
+    "lint": "node docs/lint.cjs",
+    "lint:review": "eslint src manifest.json --max-warnings 0",
+    "check:release": "node docs/check-release.cjs"
+  },
+  "devDependencies": {
+    "@eslint/json": "0.14.0",
+    "@types/node": "22.15.30",
+    "esbuild": "0.25.5",
+    "eslint": "9.39.4",
+    "eslint-plugin-obsidianmd": "0.4.0",
+    "obsidian": "1.8.7",
+    "typescript": "5.8.3"
+  }
+}

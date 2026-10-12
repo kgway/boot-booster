@@ -1,0 +1,17 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const manifest = JSON.parse(read('manifest.json')), pkg = JSON.parse(read('package.json'));
+const versions = JSON.parse(read('versions.json'));
+if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.id) || manifest.id.includes('obsidian') || manifest.id.endsWith('plugin')) throw Error('Invalid plugin ID');
+if (!/^\d+\.\d+\.\d+$/.test(manifest.version) || manifest.version !== pkg.version) throw Error('Version mismatch');
+if (versions[manifest.version] !== manifest.minAppVersion) throw Error('versions.json mismatch');
+if (!manifest.description || manifest.description.length > 250 || !manifest.description.endsWith('.')) throw Error('Invalid description');
+if (!manifest.author || manifest.author === 'Boot Booster contributors') throw Error('Public author not set');
+if (pkg.license !== 'MIT' || !read('LICENSE').startsWith('MIT License\n')) throw Error('License not set');
+const license = read('LICENSE').trim();
+if (!read('main.js').includes(license)) throw Error('Distribution bundle is missing the full license');
+const tagIndex = process.argv.indexOf('--tag');
+if (tagIndex >= 0 && process.argv[tagIndex + 1] !== manifest.version) throw Error('Release tag must match manifest.version without a v prefix');
+console.log(JSON.stringify({ version: manifest.version, minimumAppVersion: manifest.minAppVersion, license: pkg.license, tagChecked: tagIndex >= 0 }));

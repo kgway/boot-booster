@@ -1,0 +1,9 @@
+{
+  "id": "boot-booster",
+  "name": "Boot Booster",
+  "version": "1.14.4",
+  "minAppVersion": "1.8.7",
+  "description": "Faster Android startup with cached file lists, workspace display hints and responsive background verification.",
+  "author": "kgway",
+  "isDesktopOnly": false
+}

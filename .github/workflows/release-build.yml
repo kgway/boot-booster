@@ -1,0 +1,88 @@
+name: Build release assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Reviewed full source commit SHA on main
+        required: true
+      main_sha256:
+        description: Approved main.js SHA-256
+        required: true
+      manifest_sha256:
+        description: Approved manifest.json SHA-256
+        required: true
+      styles_sha256:
+        description: Approved styles.css SHA-256
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      WORKFLOW_SHA: ${{ github.sha }}
+      MAIN_SHA256: ${{ inputs.main_sha256 }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      STYLES_SHA256: ${{ inputs.styles_sha256 }}
+    steps:
+      - name: Validate input formats
+        run: |
+          node -e 'for (const [key, size] of [["SOURCE_SHA", 40], ["MAIN_SHA256", 64], ["MANIFEST_SHA256", 64], ["STYLES_SHA256", 64]]) { if (!new RegExp("^[a-f0-9]{" + size + "}$").test(process.env[key] ?? "")) throw Error("Invalid " + key); }'
+          test "$SOURCE_SHA" = "$WORKFLOW_SHA"
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify source is on main
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git merge-base --is-ancestor HEAD origin/main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24.19.0'
+      - uses: pnpm/action-setup@9fd676a19091d4595eefd76e4bd31c97133911f1 # v4.2.0
+        with:
+          version: 11.19.0
+          run_install: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+      - run: node docs/check-release.cjs
+      - run: node docs/export-public.mjs --check
+      - name: Verify reproducible build
+        run: |
+          sha256sum main.js manifest.json styles.css > before.sha256
+          pnpm build
+          sha256sum --check before.sha256
+      - name: Verify approved assets
+        run: node docs/verify-release.mjs
+      - name: Attest assets
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+      - name: Upload assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-assets
+          path: |
+            main.js
+            manifest.json
+            styles.css
+          if-no-files-found: error
+          retention-days: 14
