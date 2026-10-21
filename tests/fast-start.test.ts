@@ -189,11 +189,11 @@ test('real inventory updates still serialize with adapter I/O and recheck the re
  f.a.queue=(fn:()=>unknown)=>{queued++;return queue(fn);};await f.fast.verify();assert.ok(queued>0);assert.equal(f.a.files['Archive/a.md'].mtime,8);assert.equal(f.fast.background.updated,1);assert.equal(f.writes(),0);
 });
 
-test('a destructive folder request fails promptly instead of awaiting its own foreground hold',async()=>{
+test('a folder request verifies locally instead of awaiting its own foreground hold',async()=>{
  const f=fixture();await f.a.watchAndList();const release=f.scheduler.beginForeground('Archive/a.md');const idle=f.scheduler.idle.bind(f.scheduler);
  f.scheduler.idle=async()=>{while(f.scheduler.hasForeground())await new Promise(r=>setTimeout(r,1));await idle();};
  let timer:any;
- try{await Promise.race([assert.rejects(f.a.remove('Archive'),/確認/),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Folder operation deadlocked')),100);})]);assert.equal(f.writes(),0);}
+ try{await Promise.race([f.a.remove('Archive'),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('Folder operation deadlocked')),100);})]);assert.equal(f.writes(),1);}
  finally{clearTimeout(timer);release();await f.fast.verify();f.fast.dispose();}
 });
 

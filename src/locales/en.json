@@ -121,7 +121,7 @@
   "seedFailed": "Could not load the file list. Restart Obsidian.",
   "invalidPath": "Could not verify the file path.",
   "verificationFailed": "File verification failed. Restart Obsidian.",
-  "pendingOperation": "This operation is unavailable while the file list is being checked. Try again after verification.",
+  "pendingOperation": "This item is being checked or changed. Try again shortly.",
   "externalChange": "The file changed outside Obsidian. Reopen it before trying again.",
   "existingDestination": "The destination already exists.",
   "snapshotFailed": "Could not save the file list. The next startup will use the normal scan."

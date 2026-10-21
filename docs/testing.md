@@ -6,6 +6,12 @@ Startup optimization is enabled only on Android Obsidian API 1.13.8 and 1.14.4. 
 
 ## Validation
 
+Version 1.14.6 adds regression coverage for folder creation, rename, move and deletion during inventory verification, including populated folders, native trash return values, no-op renames, permission errors, unexpected children and concurrent child writes. It also covers stale stat and missing-path results, and prevents background verification from finishing while a folder preflight is pending. Unvalidated Android app versions still use the normal startup path; the allowlist has not been expanded.
+
+The 1.14.6 candidate passes 196 automated tests. Targeted Android 16 / Obsidian 1.14.4 checks reproduce the folder-operation refusals in 1.14.5 and confirm the fixes while background verification is deliberately held. Checks also include native filesystem watching, five repeated create/rename/delete cycles, operations after verification, unexpected external children and a controlled stale-stat race. The original 10,011 synthetic notes retain identical paths and bytes. These are functional checks, not physical-device or startup-speed measurements.
+
+Additional checks compare the native file explorer with all community plugins disabled and with 1.14.6 during verification. Empty and populated folder renames clear the native editing outline after completion in both cases. With Auto-reveal enabled, unrelated file creation and deletion reopen the active note's folder in both cases; disabling Auto-reveal prevents it. These operations do not emit another file-open event. No explorer UI overrides were added.
+
 Run `pnpm check`, `pnpm test` and `pnpm build` with the pinned dependencies. Tests use synthetic files and mocked host interfaces; they do not open a personal vault.
 
 The official Obsidian ESLint configuration runs through `pnpm lint` and `pnpm lint:review`. Both reject all errors and warnings. Candidate creation runs the same check. Neither local lint nor CI replaces the directory's own review.
