@@ -18,6 +18,7 @@ const visible=(p:string)=>p.split('/').every(s=>s&&!s.startsWith('.')&&!['__prot
 // Symbol.for also survives plugin module reloads. A draining/failed owner must
 // keep its guards without a second instance nesting another provisional scan.
 const inventoryOwner=Symbol.for('boot-booster.inventory-owner.v1');
+type FolderProof={root:string;entries:Map<string,string>;revision:number};
 function validEntry(value:unknown):value is Entry {
   const e=record(value);
   return !!e&&typeof e.name==='string'&&visible(e.name)&&!e.name.includes('\\')&&e.name===e.name.normalize('NFC')&&
@@ -52,6 +53,7 @@ export class FastStart {
   private starting:Promise<void>|null=null;
   private changes=new Map<string,number>();private touched=new Set<string>();private revision=0;
   private inflight=new Map<string,number>();
+  private folderChecks=0;
   recognizing:string|null=null;
   private points=new Map<string,{promise:Promise<void>;allowConfirmed:boolean;foreground:boolean;fresh:boolean}>();private seedDone=Promise.resolve();private finishSeed=()=>{};
   private pointQueue=new VerificationQueue();
@@ -133,13 +135,15 @@ export class FastStart {
           // Configuration is not seeded. Keep settings and disable/save usable
           // even after content verification fails; validate paths first.
           if(paths.every(hidden))return originalMethod.apply(a,args);
+          if(name==='rename'&&paths[0]===paths[1])return originalMethod.apply(a,args);
           if(this.phase==='failed')throw this.error('verificationFailed');
           if(mutation&&(paths.some(p=>p===''||p==='/'||hidden(p))))throw this.error('pendingOperation');
           // Adapter reads include dependencies of foreground views and startup
           // indexing. Waiting for idle here can deadlock a held foreground view.
           // Only our own background scanner waits for idle.
           const destructive=['rmdir','remove','trashSystem','trashLocal','rename','copy'].includes(name);
-          if(destructive&&a.files[paths[0]]?.type==='folder'){void this.verify().catch(()=>{});throw this.error('pendingOperation');}
+          const folder=destructive&&a.files[paths[0]]?.type==='folder'?this.folderProof(paths[0]):null;
+          if(folder)this.assertNoFolderMutation(folder.root);
           const approved=mutation?new Map<string,string>():null;
           for(const raw of paths){const path=raw==='/'?'':raw;if(path&&!visible(path))continue;const before=this.signature(a.files[path]);
             const token=this.scheduler.foregroundToken(path);
@@ -151,6 +155,7 @@ export class FastStart {
             if(mutation&&before!==this.signature(a.files[path]))throw this.error('externalChange');
             approved?.set(path,before);
           }
+          if(folder)await this.verifyFolder(folder);
           // Native stat can return its old result after a watcher notification.
           // Also recheck the source after awaiting a rename/copy destination.
           // This is an in-memory fence; normal mutations add no further disk I/O.
@@ -158,6 +163,7 @@ export class FastStart {
             const confirmed=this.confirmed.get(path);
             if(!confirmed||this.newer(path,confirmed.revision)||confirmed.signature!==signature||this.signature(a.files[path])!==signature)throw this.error('externalChange');
           }
+          if(folder&&this.pending())this.assertFolderProof(folder);
           if(['rename','copy'].includes(name)&&a.files[paths[1]])throw this.error('existingDestination');
           if(mutation)for(const path of paths)this.mark(path);
         }
@@ -176,6 +182,33 @@ export class FastStart {
   private pending():boolean{return this.phase==='provisional'||this.phase==='reconciling'||this.phase==='failed';}
   private mark(path:string):void {this.changes.set(path,++this.revision);this.touched.add(path);}
   private newer(path:string,fence:number):boolean {for(let p=path;p;p=p.includes('/')?p.slice(0,p.lastIndexOf('/')):'')if((this.changes.get(p)??0)>fence||(this.inflight.get(p)??0)>0)return true;return false;}
+  private folderProof(root:string):FolderProof {
+    return {root,revision:this.revision,entries:new Map(Object.keys(this.a.files).filter(p=>inside(p,root)).map(p=>[p,this.signature(this.a.files[p])]))};
+  }
+  private assertNoFolderMutation(root:string):void {
+    for(const [path,count] of this.inflight)if(count>0&&(inside(path,root)||inside(root,path)))throw this.error('pendingOperation');
+  }
+  private assertFolderProof(proof:FolderProof):void {
+    this.assertHealthy();this.assertNoFolderMutation(proof.root);
+    for(const [path,revision] of this.changes)if(revision>proof.revision&&(inside(path,proof.root)||inside(proof.root,path)))throw this.error('externalChange');
+    for(const [path,signature] of proof.entries)if(this.signature(this.a.files[path])!==signature)throw this.error('externalChange');
+    for(const path of Object.keys(this.a.files))if(inside(path,proof.root)&&!proof.entries.has(path))throw this.error('externalChange');
+  }
+  /** Verify the requested subtree without waiting for the background idle gate.
+   * Unexpected contents are reconciled for display, then require a new request. */
+  private async verifyFolder(proof:FolderProof):Promise<void> {
+    this.folderChecks++;
+    try{
+      const children=new Map<string,string[]>();
+      for(const path of proof.entries.keys()){const parent=this.parent(path);let list=children.get(parent);if(!list)children.set(parent,list=[]);list.push(path);}
+      const queue=[proof.root];
+      for(let head=0;head<queue.length;head++){
+        this.assertHealthy();this.assertNoFolderMutation(proof.root);
+        await this.scanDirectory(queue[head],false,queue,children.get(queue[head])??[]);
+      }
+      this.assertFolderProof(proof);
+    }finally{this.folderChecks--;}
+  }
   private async readOutside(path:string):Promise<Entry[]> {
     const entries=await this.directory(path);const result=[...entries];
     for(const e of entries)if(e.type==='directory'&&!selected(e.name,this.scope))result.push(...await this.readOutside(e.name));
@@ -229,14 +262,18 @@ export class FastStart {
       finally{this.pointStatMs+=performance.now()-startedAt;}
       this.assertHealthy();
       const invalidated=this.newer(path,fence);
+      // A watcher or mutation can retire an in-flight native result. Applying
+      // it would resurrect removed paths or erase newly created ones.
+      if(invalidated){this.confirmed.delete(path);this.touched.add(path);return;}
       if(entry)this.apply(entry);else this.removeCached(path);
       const changed=before!==this.signature(this.a.files[path]);
-      if(changed||entry?.type==='file')this.changes.set(path,++this.revision);
+      // Read-only confirmation is not a content change. Counting it as one
+      // falsely rejects folder operations while metadata/plugins read children.
+      if(changed)this.changes.set(path,++this.revision);
       if(changed&&entry?.type==='directory')this.touched.add(path);
       // A watcher event during native I/O must not become part of a reusable
       // confirmation. The following read checks again, even in the same open.
-      if(invalidated)this.confirmed.delete(path);
-      else this.confirmed.set(path,{signature:this.signature(this.a.files[path]),revision:this.revision,foregroundToken:this.scheduler.foregroundToken(path)});
+      this.confirmed.set(path,{signature:this.signature(this.a.files[path]),revision:this.revision,foregroundToken:this.scheduler.foregroundToken(path)});
     }));
   }
   verify():Promise<void>{
@@ -263,13 +300,13 @@ export class FastStart {
       // The final yield is an event boundary too. Do not discard notifications
       // or finish while a delegated mutation is still in flight.
       this.progress.stage='finishing';await this.scheduler.idle();if(this.stopped)return;
-      if(!this.touched.size&&!this.points.size&&![...this.inflight.values()].some(count=>count>0))break;
+      if(!this.touched.size&&!this.points.size&&!this.folderChecks&&![...this.inflight.values()].some(count=>count>0))break;
       }
       this.phase='verified';this.progress.stage='done';this.progress.path='';this.inventoryReady=true;this.verifiedAtMs=performance.now();this.report('ready');this.contentChanged();
       this.confirmed.clear();this.changes.clear();this.inflight.clear();this.children=null;
     }catch(e){if(this.stopped)return;this.phase='failed';this.progress.stage='failed';this.report('verificationFailed');throw e;}
   }
-  private async scanDirectory(path:string,background:boolean,queue:string[]):Promise<void>{
+  private async scanDirectory(path:string,background:boolean,queue:string[],knownChildren?:Iterable<string>):Promise<void>{
     const fence=this.revision;let entries:Entry[];
     try{entries=await this.directory(path,background);}catch(e){if(path&&record(e).code==='ENOENT'){await this.ensurePath(path);return;}throw e;}
     const names=new Set(entries.map(e=>e.name));
@@ -289,8 +326,8 @@ export class FastStart {
         if(background)this.background.applyMs+=performance.now()-start;
       });
     }
-    const candidates=this.children?(this.children.get(path)??[]):Object.keys(this.a.files).filter(p=>p!=='/'&&this.parent(p)===path);
-    const missing=[...candidates].filter(p=>!names.has(p)&&this.a.files[p]);
+    const candidates=knownChildren??(this.children?(this.children.get(path)??[]):Object.keys(this.a.files).filter(p=>p!=='/'&&this.parent(p)===path));
+    const missing=[...new Set([...candidates,...(knownChildren??[])])].filter(p=>!names.has(p)&&this.a.files[p]);
     for(const p of missing){if(background){await this.scheduler.checkpoint();this.background.missingChecks++;}await this.ensurePath(p);}
   }
   private matches(e:Entry):boolean {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.6
+
+- Folder renames, moves and deletions verify the requested subtree instead of waiting for the entire background inventory. Unexpected contents are reconciled before the operation can be retried.
+- Discard stat results invalidated by concurrent changes, preventing removed folders from reappearing or newly created folders from disappearing.
+- Preserve native no-op renames and check folder operations against concurrent child writes.
+- Unchanged file reads no longer invalidate folder operations as if another process had edited their contents.
+
 ## 1.14.5
 
 - Lightweight tab previews use Obsidian's native placeholder handling instead of CSS `!important` overrides. Normal image loading is restored when the option is disabled or the plugin unloads.

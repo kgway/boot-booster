@@ -16,8 +16,8 @@
 
 ## 今回確認すること
 
-- 1.14.5では「タブプレビューの省略」をオンにして再起動し、タブ一覧にタイトルとアイコンが表示されることを確認してください。オフにして再起動すると標準の画像表示に戻ります。
-- 起動時に選ばれるノートと、タブ一覧から開くノートが従来どおりであることを確認してください。
+- 1.14.6では、一覧の確認中と完了後に、試しのフォルダを作成・リネーム・削除できることを確認してください。中に試しのノートを入れた場合も、フォルダ移動後のノートが開けることを確認してください。
+- 削除したフォルダが戻らず、新規フォルダが勝手に消えないこと、起動時に選ばれるノートが従来どおりであることを確認してください。
 
 ## そのほかの機能
 
@@ -31,7 +31,7 @@
   参考値であり、今回の起動に高速化がなかった場合の時間を断定するものではありません。
 
 「タブプレビューの省略」は初期設定オフです。高速化する範囲を「フォルダを選ぶ」にした場合は、対象フォルダを追加してください。未選択では一覧の高速化は働きません。一覧照合中の検索・Graph・クエリ結果は暫定です。
-照合中はフォルダ削除・移動・コピーを止め、完了後の再操作を案内します。
+照合中のフォルダ操作では、そのフォルダの中身を先に確認します。予期しない変更が見つかると一覧を更新して操作を止めるため、最新の状態を確認してからやり直してください。
 
 ## 通信・保存
 
@@ -52,12 +52,12 @@ Obsidianを終了し、バックアップの本体3ファイルを戻します�
 
 Close Obsidian and back up your vault before installing. Extract `boot-booster` into `.obsidian/plugins/`. When updating, replace only `main.js`, `manifest.json` and `styles.css`, keeping `data.json`. Enable Boot Booster after reopening Obsidian. This is a trial candidate; the stable release is available in Community plugins.
 
-For 1.14.5, turn on Skip tab previews and restart. Check that the tab overview shows titles and icons. Turn the option off and restart to restore normal previews. Check that the selected note and tab selection behave as before.
+For 1.14.6, create, rename and delete a test folder during and after inventory verification. Include a test note and confirm that it opens after moving the folder. Deleted folders should stay deleted and new folders should remain visible. Check that the selected startup note behaves as before.
 
 Android file-list optimization supports Obsidian API 1.13.8 / 1.14.4. The first startup builds a reference inventory. The interface starts in Japanese when Obsidian uses Japanese, and in English otherwise. The Language dropdown switches it immediately and saves the preference on this device.
 
 History, its small Show all link, Copy, Clear history and JSON share one setting item. Copy and clear work with JSON closed. Startup status and diagnostics share another item. Measure normal startup disables optimizations for reference measurements; restart for each run. Timings are local observations, not native app launch time or predictions.
 
-Notes are not cached or sent elsewhere. File inventories and the latest 20 path-free startup records stay on this device. While verification is running, folder removal/move/copy is refused and indexes can be provisional. Writes are checked again; observed external changes cause an operation to be refused. This does not lock writes by external apps.
+Notes are not cached or sent elsewhere. File inventories and the latest 20 path-free startup records stay on this device. Folder operations check their own subtree while background verification continues. Unexpected changes refresh the file list and refuse the operation; inspect the updated contents before retrying. Indexes can be provisional. Writes are checked again. This does not lock writes by external apps.
 
 If verification fails, set File list optimization to Off and restart. To roll back, close Obsidian and restore the three backed-up plugin files, keeping `data.json`. Emulator checks do not establish physical-device speed or sync safety.

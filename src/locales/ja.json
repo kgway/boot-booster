@@ -121,7 +121,7 @@
   "seedFailed": "一覧を読み込めませんでした。Obsidianを開き直してください。",
   "invalidPath": "ファイルの場所を確認できません。",
   "verificationFailed": "ファイルの確認に失敗しました。Obsidianを開き直してください。",
-  "pendingOperation": "一覧の確認中はこの操作を実行できません。確認完了後にやり直してください。",
+  "pendingOperation": "対象の確認・変更が終わってから、やり直してください。",
   "externalChange": "ファイルが外部で変更されています。開き直してから操作してください。",
   "existingDestination": "移動・コピー先にファイルが既にあります。",
   "snapshotFailed": "一覧を保存できませんでした。次回は通常の方法で読み込みます。"
