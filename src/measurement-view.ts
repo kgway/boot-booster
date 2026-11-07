@@ -1,6 +1,6 @@
 import {Notice,Setting} from 'obsidian';
 import {BenchmarkStore,StartupRun} from './benchmark';
-import {seconds} from './feedback';
+import {seconds,startupApplication} from './feedback';
 import {japanese,Language,MessageKey,Translator} from './i18n';
 
 const RECENT_LIMIT=5;
@@ -32,10 +32,11 @@ export class MeasurementView {
   }
   render(force=false):void{
     const current=this.current(),runs=this.store.runs(current).reverse(),t=this.t;
+    const applications=runs.map(run=>startupApplication(run,t));
     const rows=runs.map(run=>[dateTime(run.startedAt,this.dateFormat),
-      t(run.condition.mode==='measurement-only'?'normal':'optimized'),ms(run.milestones.uiReadyMs,t),phase(run,'readingFiles',t),phase(run,'loadingMetadata',t),phase(run,'workspaceLayout',t),ms(run.milestones.verificationMs,t),recordStatus(run,t)]);
+      startupApplication(run,t).label,ms(run.milestones.uiReadyMs,t),phase(run,'readingFiles',t),phase(run,'loadingMetadata',t),phase(run,'workspaceLayout',t),ms(run.milestones.verificationMs,t),recordStatus(run,t)]);
     // Detailed plugin telemetry can change without affecting any table cells.
-    const signature=JSON.stringify([this.expanded,rows]);
+    const signature=JSON.stringify([this.expanded,rows,applications]);
     if(this.json.open&&document.activeElement!==this.box)this.box.value=this.store.export(current);
     if(!force&&(signature===this.rendered||this.records.contains(document.activeElement)||this.records.contains(window.getSelection()?.anchorNode??null)))return;
     this.rendered=signature;
@@ -46,7 +47,7 @@ export class MeasurementView {
     const headers:[MessageKey,MessageKey][]=[['date','dateHelp'],['mode','modeTip'],['ui','uiTip'],['list','listTip'],['index','indexTip'],['restore','restoreTip'],['verification','verificationTip'],['record','recordTip']];
     for(const [name,title] of headers)head.createEl('th',{text:t(name),attr:{scope:'col',title:t(title)}});
     const body=table.createEl('tbody');
-    rows.forEach((cells,index)=>{const row=body.createEl('tr');row.hidden=!this.expanded&&index>=RECENT_LIMIT;for(const text of cells)row.createEl('td',{text});});
+    rows.forEach((cells,index)=>{const row=body.createEl('tr');row.hidden=!this.expanded&&index>=RECENT_LIMIT;cells.forEach((text,column)=>row.createEl('td',{text,...(column===1?{attr:{title:applications[index].detail}}:{})}));});
     this.records.scrollLeft=left;
   }
 }

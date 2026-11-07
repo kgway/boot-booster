@@ -7,7 +7,8 @@ import { apiVersion } from 'obsidian';
 import { protectDiscoveredNotes,templaterOwner } from './discovery-guard';
 import { WorkspaceOptimizer } from './startup';
 import {fastTabs} from './fast-tabs';
-import {supportsAndroidAdapter} from './compatibility';
+import {CompatibilityControl} from './compatibility';
+import {CompatibilityPrompt} from './compatibility-prompt';
 import {BenchmarkStore,StartupRecorder,MeasurePreferences,measureDefaults,HISTORY_LIMIT} from './benchmark';
 import {MeasurementView} from './measurement-view';
 import {protectForeground} from './foreground';
@@ -31,6 +32,8 @@ export default class BootBooster extends Plugin {
   private skippedPreviews=0;
   private pluginFiles:PluginFiles|null=null;private earlyOrder='inactive';
   private settingsLoaded=true;private appliedConfiguration='';private scopeIdentity='';
+  compatibility=new CompatibilityControl(apiVersion);private appliedCompatibility=this.compatibility.snapshot();
+  private metadataPreloadStarted=false;
   private settingsTab:BoosterSettings|undefined;
   localization=new Localizer('en');
   readonly text:Translator=(key,values)=>this.localization.text(key,values);
@@ -38,6 +41,8 @@ export default class BootBooster extends Plugin {
   async onload():Promise<void>{
     const root=this.app.vault.adapter.getResourcePath('');
     this.localization=new Localizer(getLanguage(),window.localStorage,root);
+    this.compatibility=new CompatibilityControl(apiVersion,window.localStorage,root);
+    this.appliedCompatibility=this.compatibility.snapshot();
     try{this.measurementStore=new BenchmarkStore(window.localStorage,root);this.measurementPreferences=this.measurementStore.preferences();}catch{/* Recording is optional. */}
     this.measurementOnly=this.measurementPreferences.mode==='measurement-only';
     if(this.measurementStore&&this.measurementPreferences.enabled&&!this.app.workspace.layoutReady){
@@ -60,10 +65,11 @@ export default class BootBooster extends Plugin {
     try{this.settings=parseSettings(await this.loadData(),this.app.vault.configDir);}catch{loaded=false;new Notice('Boot Booster: '+this.text('settingsLoadFailed'));}
     this.settingsLoaded=loaded;
     if(this.stopped)return;
-    if(loaded&&!this.measurementOnly&&Platform.isAndroidApp&&supportsAndroidAdapter(apiVersion)){
+    const compatible=this.appliedCompatibility.allowed,allowUnverified=compatible&&!this.appliedCompatibility.verified;
+    if(loaded&&!this.measurementOnly&&Platform.isAndroidApp&&compatible){
       if(this.settings.startup.pluginFiles!==false){
         const key=`boot-booster:plugin-file-sizes:v1:${root}`;
-        this.pluginFiles=new PluginFiles({api:apiVersion,adapter:this.app.vault.adapter,configDir:this.app.vault.configDir,manifests:record(record(this.app).plugins).manifests,
+        this.pluginFiles=new PluginFiles({api:apiVersion,allowUnverified,adapter:this.app.vault.adapter,configDir:this.app.vault.configDir,manifests:record(record(this.app).plugins).manifests,
           load:()=>parseJSON(window.localStorage.getItem(key)||'null'),save:sizes=>window.localStorage.setItem(key,JSON.stringify(sizes))});
         this.pluginFiles.install();
       }
@@ -78,7 +84,7 @@ export default class BootBooster extends Plugin {
       });
     }
     if(loaded&&!this.measurementOnly&&Platform.isAndroidApp&&!this.app.workspace.layoutReady){
-      startMetadataPreload(this.app.metadataCache,apiVersion);
+      this.metadataPreloadStarted=startMetadataPreload(this.app.metadataCache,apiVersion,allowUnverified);
     }
     this.preferenceKey=`boot-booster:fast-enabled:${root}`;
     try{const value=window.localStorage.getItem(this.preferenceKey);this.fastMode=value==='off'||value==='false'?'off':value==='always'||value==='true'?'always':'auto';}catch{this.fastMode='off';}
@@ -93,7 +99,7 @@ export default class BootBooster extends Plugin {
     this.register(()=>{void (this.fastStart?.dispose()??Promise.resolve()).then(()=>templateGuard?.dispose());});
     if(!this.measurementOnly&&Platform.isAndroidApp&&loaded&&this.fastMode!=='off'){
       const scope=this.settings.scope;const key=`boot-booster:snapshot:v2:${root}:${scopeKey(scope)}`;
-      this.fastStart=new FastStart({api:apiVersion,adapter:this.app.vault.adapter,scope,mode:this.fastMode,scheduler:this.scheduler,text:this.text,
+      this.fastStart=new FastStart({api:apiVersion,allowUnverified,adapter:this.app.vault.adapter,scope,mode:this.fastMode,scheduler:this.scheduler,text:this.text,
         ready:()=>new Promise(resolve=>this.app.workspace.onLayoutReady(resolve)),startup:()=>!this.app.workspace.layoutReady,beforeRecognize:protect,
         load:()=>{const raw=window.localStorage.getItem(key);if(raw)return parseJSON(raw);
           if(!scope.all&&scope.folders.length===1){const old=window.localStorage.getItem(`boot-booster:snapshot:v1:${root}:${scope.folders[0]}`);if(old){const s=record(parseJSON(old));if(s.version===1&&s.target===scope.folders[0])return {...s,version:2,scope};}}return null;},
@@ -101,19 +107,27 @@ export default class BootBooster extends Plugin {
         defer:(fn,ms)=>{const timer=window.setTimeout(()=>{this.timers.delete(timer);fn();},ms);this.timers.add(timer);return timer;}});
       this.fastStart.install();
     }
-    if(!this.measurementOnly&&loaded){this.startup=new WorkspaceOptimizer(this.app,this.settings.startup,this.scheduler);this.startup.install();}
+    if(!this.measurementOnly&&loaded){this.startup=new WorkspaceOptimizer(this.app,this.settings.startup,this.scheduler,allowUnverified);this.startup.install();}
     if(this.stopped)return;
-    if(loaded&&!this.measurementOnly&&Platform.isAndroidApp&&supportsAndroidAdapter(apiVersion)){
+    if(loaded&&!this.measurementOnly&&Platform.isAndroidApp&&compatible){
       const app=record(this.app);
-      if(this.settings.startup.fastTabs===true&&typeof app.appId==='string')this.register(fastTabs(app.mobileTabSwitcher,record(window).Capacitor,app.workspace,app.appId,apiVersion,()=>!this.stopped&&this.settings.startup.fastTabs===true,()=>this.skippedPreviews++));
+      if(this.settings.startup.fastTabs===true&&typeof app.appId==='string')this.register(fastTabs(app.mobileTabSwitcher,record(window).Capacitor,app.workspace,app.appId,apiVersion,()=>!this.stopped&&this.settings.startup.fastTabs===true,()=>this.skippedPreviews++,allowUnverified));
     }
     if(this.fastStart&&this.fastStart.phase!=='unsupported')this.installActivityHooks();
     this.measurement?.observeActions(WorkspaceLeaf.prototype,record(this.app).mobileTabSwitcher);
     this.languageCommands=[{command:this.addCommand({id:'diagnostics',name:this.text('statusCommand'),callback:()=>this.openSettings()}),key:'statusCommand'},
       {command:this.addCommand({id:'startup-measurements',name:this.text('historyCommand'),callback:()=>this.openMeasurements()}),key:'historyCommand'}];
     this.settingsTab=new BoosterSettings(this.app,this);this.addSettingTab(this.settingsTab);
-    this.measurement?.configure({settingsLoaded:loaded,optimizationEnabled:!this.measurementOnly,fastMode:this.fastMode,scope:{all:this.settings.scope.all,folderCount:this.settings.scope.folders.length,identity:this.scopeIdentity||undefined},startup:{...this.settings.startup,pluginFiles:this.settings.startup.pluginFiles!==false,fastTabs:this.settings.startup.fastTabs===true,plugins:'native',first:!this.measurementOnly&&this.earlyOrder!=='inactive'}},()=>this.diagnosticReport());
+    this.measurement?.configure({settingsLoaded:loaded,optimizationEnabled:!this.measurementOnly,compatibility:{...this.appliedCompatibility,android:Platform.isAndroidApp},fastMode:this.fastMode,scope:{all:this.settings.scope.all,folderCount:this.settings.scope.folders.length,identity:this.scopeIdentity||undefined},startup:{...this.settings.startup,pluginFiles:this.settings.startup.pluginFiles!==false,fastTabs:this.settings.startup.fastTabs===true,plugins:'native',first:!this.measurementOnly&&this.earlyOrder!=='inactive'}},()=>this.diagnosticReport());
     this.measurement?.onloadFinished();
+    if(loaded&&this.compatibility.shouldPrompt(Platform.isAndroidApp,!this.measurementOnly&&(this.fastMode!=='off'||this.settings.startup.workspace||this.settings.startup.pluginFiles!==false||this.settings.startup.fastTabs===true))){
+      this.app.workspace.onLayoutReady(()=>{
+        const timer=window.setTimeout(()=>{this.timers.delete(timer);if(this.stopped||!this.compatibility.shouldPrompt(Platform.isAndroidApp,!this.measurementOnly))return;
+          try{this.compatibility.prompted();}catch{/* Storage failure must not block normal startup. */}
+          const prompt=new CompatibilityPrompt(this.app,this.compatibility,this.text);this.register(()=>prompt.close());prompt.open();
+        },500);this.timers.add(timer);
+      });
+    }
   }
   private installActivityHooks():void {
     const active=()=>{const file=this.app.workspace.getActiveFile();if(file)this.scheduler.prioritize(file.path);else this.scheduler.activity();};
@@ -127,7 +141,7 @@ export default class BootBooster extends Plugin {
       const release=scheduler.beginForeground(file.path);
       try{return await originalOpen.apply(receiver,[file,...args]);}finally{release();}
     };
-    const state=guardViewState(originalState,{owns:leaf=>leaf.app===this.app,scanning,scheduler,deferOnly:(leaf,state)=>defersInitialView(leaf,state,apiVersion),
+    const state=guardViewState(originalState,{owns:leaf=>leaf.app===this.app,scanning,scheduler,deferOnly:(leaf,state)=>defersInitialView(leaf,state,apiVersion,this.appliedCompatibility.allowed&&!this.appliedCompatibility.verified),
       ensure:path=>this.fastStart!.ensurePath(path)});
     const undo=patchMethods([{host:WorkspaceLeaf.prototype,name:'openFile',replacement:function(this:WorkspaceLeaf,file:TFile,...args:unknown[]){return open(this,file,args);}},
       {host:WorkspaceLeaf.prototype,name:'setViewState',replacement:state}]);
@@ -151,10 +165,12 @@ export default class BootBooster extends Plugin {
   setMeasurementPreferences(change:Partial<MeasurePreferences>,notify=true):void{
     const next={...this.measurementPreferences,...change};try{if(!this.measurementStore)throw Error('Unavailable');this.measurementStore.setPreferences(next);this.measurementPreferences=next;if(notify)new Notice(this.text('nextStartup'));}catch{new Notice(this.text('measureSaveFailed'));}
   }
-  private nextConfiguration():string{return JSON.stringify([this.settings,this.fastMode,this.measurementPreferences]);}
+  setCompatibilityAutomatic(value:boolean):void{try{this.compatibility.setAutomatic(value);new Notice(this.text('nextStartup'));}catch{new Notice(this.text('settingsSaveFailed'));}}
+  private nextConfiguration():string{return JSON.stringify([this.settings,this.fastMode,this.measurementPreferences,this.compatibility.snapshot(),this.compatibility.automatic]);}
   feedback(){
     const mode=this.measurementOnly?'measurement-only':'optimized';
-    const status=inventoryStatus(this.fastStart,this.scheduler.waitingFor,mode,Platform.isAndroidApp&&supportsAndroidAdapter(apiVersion),this.text);
+    const status=inventoryStatus(this.fastStart,this.scheduler.waitingFor,mode,Platform.isAndroidApp&&this.appliedCompatibility.allowed,this.text);
+    if(Platform.isAndroidApp&&!this.measurementOnly&&!this.appliedCompatibility.allowed)status.detail=this.text('unsupportedApi',{api:apiVersion});
     if(!this.settingsLoaded){status.title=this.text('settingsFallback');status.detail=this.text('settingsFallbackHelp');status.next=this.text('settingsRecovery');}
     const current=this.measurement?.run,history=this.measurementStore?.runs(current)??[];
     const latest=current??history[history.length-1];
@@ -171,8 +187,8 @@ export default class BootBooster extends Plugin {
   async setStartup(change:Partial<StartupSettings>):Promise<void>{
     this.saves=this.saves.then(async()=>{const next:Settings={...this.settings,startup:{...this.settings.startup,...change}};await this.saveData(next);this.settings=next;}).catch(()=>{new Notice(this.text('settingsSaveFailed'));});await this.saves;
   }
-  diagnosticReport():object{return {version:this.manifest.version,api:apiVersion,mode:this.fastMode,measurementMode:this.measurementOnly?'measurement-only':'optimized',recordingStatus:this.measurement?.run.status??'off',scope:this.settings.scope,
-    startup:this.startup?{...this.startup.diagnostics(),first:this.earlyOrder,pluginFiles:this.pluginFiles?.timing??null,tabSnapshotsSkipped:this.skippedPreviews}:null,startupSettings:this.settings.startup,
+  diagnosticReport():object{return {version:this.manifest.version,api:apiVersion,compatibility:this.appliedCompatibility,mode:this.fastMode,measurementMode:this.measurementOnly?'measurement-only':'optimized',recordingStatus:this.measurement?.run.status??'off',scope:this.settings.scope,
+    startup:this.startup?{...this.startup.diagnostics(),metadataPreloadStarted:this.metadataPreloadStarted,first:this.earlyOrder,pluginFiles:this.pluginFiles?.timing??null,tabSnapshotsSkipped:this.skippedPreviews}:null,startupSettings:this.settings.startup,
     fastStart:this.fastStart?{phase:this.fastStart.phase,reason:this.fastStart.reason,startupCalls:this.fastStart.startupCalls,cacheState:this.fastStart.cacheState,seeded:this.fastStart.seeded,scanned:this.fastStart.scanned,provisionalAtMs:this.fastStart.provisionalAtMs,verifiedAtMs:this.fastStart.verifiedAtMs,idleWaits:this.scheduler.waits,pointStats:this.fastStart.pointStats,startupPointStats:this.fastStart.startupPointStats,foregroundStatReuses:this.fastStart.foregroundStatReuses,pointStatMs:this.fastStart.pointStatMs,pointQueueWaitMs:this.fastStart.pointQueueWaitMs,cacheLoadMs:this.fastStart.cacheLoadMs,seedMs:this.fastStart.seedMs,inventoryMs:this.fastStart.inventoryMs,normalInventoryMs:this.fastStart.normalInventoryMs,progress:{...this.fastStart.progress,waitingFor:this.scheduler.waitingFor},background:this.fastStart.background,scheduler:this.scheduler.timing}:null};}
 }
 class BoosterSettings extends PluginSettingTab {
@@ -238,6 +254,7 @@ class BoosterSettings extends PluginSettingTab {
       row('tabs','tabsHelp',setting=>{setting.addToggle(v=>v.setValue(this.booster.settings.startup.workspace).onChange(value=>this.booster.setStartup({workspace:value})));}),
       row('plugins','pluginsHelp',setting=>{setting.addToggle(v=>v.setValue(this.booster.settings.startup.pluginFiles!==false).onChange(value=>this.booster.setStartup({pluginFiles:value})));}),
       row('previews','previewsHelp',setting=>{setting.addToggle(v=>v.setValue(this.booster.settings.startup.fastTabs===true).onChange(value=>this.booster.setStartup({fastTabs:value})));}),
+      row('allowUnverified','allowUnverifiedHelp',setting=>{setting.addToggle(v=>v.setValue(this.booster.compatibility.automatic).onChange(value=>this.booster.setCompatibilityAutomatic(value)));}),
       row('language',undefined,setting=>{setting.addDropdown(d=>d.addOptions({ja:'日本語',en:'English'}).setValue(this.booster.localization.choice).onChange(value=>{this.booster.setLanguage(value as LanguageChoice);this.redisplay();}));})
     ]},{type:'group',heading:t('timingHeading'),items:[
       row('startupMode','modeHelp',setting=>{setting.addDropdown(d=>d.addOptions({optimized:t('optimized'),'measurement-only':t('normalMeasure')}).setValue(this.booster.measurementPreferences.mode).onChange(v=>{this.booster.setMeasurementPreferences({mode:v as MeasurePreferences['mode'],...(v==='measurement-only'?{enabled:true}:{})});this.redisplay();}));}),

@@ -2,9 +2,13 @@
 
 ## Compatibility
 
-Startup optimization is enabled only on Android Obsidian API 1.13.8 and 1.14.4. Desktop and iOS are not accelerated; other Android versions use normal startup. The allowlist is maintained in `src/compatibility.ts`, and the platform checks are applied before optimization hooks are installed.
+Validated Android Obsidian API versions are 1.13.8, 1.14.4 and 1.15.0. Desktop and iOS are not accelerated. Other Android versions use normal startup by default and ask once per version after the layout is ready. Trying the current version or enabling **Automatically try unverified app versions** takes effect on the next startup; the latter also suppresses prompts after later updates. Consent is stored on this device. Internal capability checks, snapshot validation and file guards still apply; opting in does not establish compatibility with an untested release. The validated versions are maintained in `src/compatibility.ts`.
 
 ## Validation
+
+Version 1.14.7 adds tests for version-specific and automatic consent, prompt suppression and unload cleanup, persistence failures, retained stale-write and missing-method guards, and observed startup application results. Unapplied or unknown optimized-mode records are excluded from automatic speed comparisons. A permitted app version alone is not evidence that cached file lists or other optimizations ran; older records with insufficient evidence show Unknown.
+
+Its 208 automated tests are supplemented by Android 16 / Obsidian 1.15.0 (396) functional checks using the official APK. The previous plugin uses normal startup; 1.14.7 reuses a validated inventory and completes verification. Checks include note selection, empty and populated folder operations during verification, tab overview, post-verification operations, Japanese and English settings, history disclosure and the native consent dialog with a simulated future-version label. The original 10,010 synthetic notes retain identical paths and bytes. The AVD runs on a temporary read-only-instance disk, and is stopped after removing the fixtures. No physical-device performance comparison was performed.
 
 Version 1.14.6 adds regression coverage for folder creation, rename, move and deletion during inventory verification, including populated folders, native trash return values, no-op renames, permission errors, unexpected children and concurrent child writes. It also covers stale stat and missing-path results, and prevents background verification from finishing while a folder preflight is pending. Unvalidated Android app versions still use the normal startup path; the allowlist has not been expanded.
 

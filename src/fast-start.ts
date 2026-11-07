@@ -9,7 +9,7 @@ import {record,isRecord,isMethod} from './runtime';
 export interface Entry { name:string; type:'file'|'directory'; ctime?:number; mtime?:number; size?:number; }
 export interface Snapshot { version:2; api:string; root:string; scope:Scope; entries:Entry[]; normalScanMs?:number; }
 export interface FastPort {
-  api:string; adapter:unknown; scope:Scope; mode?:'auto'|'always'; scheduler?:IdleScheduler; text?:Translator;
+  api:string; adapter:unknown; scope:Scope; mode?:'auto'|'always'; scheduler?:IdleScheduler; text?:Translator; allowUnverified?:boolean;
   load():unknown; save(snapshot:Snapshot):void; changed(message:string):void;
   defer(callback:()=>void,ms:number):unknown;
   ready?():Promise<void>; startup?():boolean; beforeRecognize?():void;
@@ -24,10 +24,10 @@ function validEntry(value:unknown):value is Entry {
   return !!e&&typeof e.name==='string'&&visible(e.name)&&!e.name.includes('\\')&&e.name===e.name.normalize('NFC')&&
     (e.type==='directory'||(e.type==='file'&&[e.ctime,e.mtime,e.size].every(n=>typeof n==='number'&&Number.isFinite(n)&&n>=0)));
 }
-export function validSnapshot(value:unknown,root:string,scope:Scope,api:string):value is Snapshot {
+export function validSnapshot(value:unknown,root:string,scope:Scope,api:string,allowUnverified=false):value is Snapshot {
   if(!isRecord(value)||!isRecord(value.scope)||!Array.isArray(value.scope.folders)||!value.scope.folders.every((p:unknown)=>typeof p==='string'))return false;
   const s=value as unknown as Snapshot;
-  if(!s||s.version!==2||s.root!==root||!compatibleInventory(s.api,api)||!s.scope||!Array.isArray(s.scope.folders)||typeof s.scope.all!=='boolean'||scopeKey(s.scope)!==scopeKey(scope)||!Array.isArray(s.entries)||s.entries.length>100000)return false;
+  if(!s||s.version!==2||s.root!==root||!compatibleInventory(s.api,api,allowUnverified)||!s.scope||!Array.isArray(s.scope.folders)||typeof s.scope.all!=='boolean'||scopeKey(s.scope)!==scopeKey(scope)||!Array.isArray(s.entries)||s.entries.length>100000)return false;
   const kinds=new Map<string,string>();
   for(const e of s.entries){if(!validEntry(e)||!selected(e.name,scope)||kinds.has(e.name))return false;kinds.set(e.name,e.type);}
   for(const e of s.entries){const parent=e.name.slice(0,e.name.lastIndexOf('/'));if(e.name.includes('/')&&!(scope.folders.includes(e.name)&&e.type==='directory')&&kinds.get(parent)!=='directory')return false;}
@@ -69,7 +69,7 @@ export class FastStart {
     if(this.disposed)return false;
     if(this.installed)return true;
     if(isRecord(candidate)&&Reflect.get(candidate,inventoryOwner)){this.phase='unsupported';this.report('previousScan');return false;}
-    if(!supportsAndroidAdapter(this.port.api)){this.phase='unsupported';this.report('unsupportedApi',{api:this.port.api});return false;}
+    if(!supportsAndroidAdapter(this.port.api,this.port.allowUnverified)){this.phase='unsupported';this.report('unsupportedApi',{api:this.port.api});return false;}
     if(!this.scope.all&&!this.scope.folders.length){this.phase='unsupported';this.report('emptyScope');return false;}
     if(!isAndroidInventoryAdapter(candidate)){this.phase='unsupported';this.report('missingApi');return false;}
     const a=this.a=candidate;
@@ -80,7 +80,7 @@ export class FastStart {
       const inventoryStart=performance.now();
       this.startupCalls++;
       if(!this.snapshotLoaded){this.snapshotLoaded=true;const start=performance.now();
-        try{const s=this.port.load();this.cacheState=s?'invalid':'missing';if(validSnapshot(s,a.basePath,this.scope,this.port.api)){
+        try{const s=this.port.load();this.cacheState=s?'invalid':'missing';if(validSnapshot(s,a.basePath,this.scope,this.port.api,this.port.allowUnverified)){
           this.cacheState='loaded';this.snapshot=s;
           // Inventory compatibility does not imply the new app has the same
           // native scan performance. Auto mode measures it again after an update.
@@ -352,7 +352,7 @@ export class FastStart {
     try{
       const entries:Entry[]=Object.entries(this.a.files).filter((row):row is [string,CachedEntry]=>!!row[1]&&row[0]!=='/'&&selected(row[0],this.scope)&&visible(row[0])).map(([,v])=>v.type==='folder'?{name:v.realpath,type:'directory'}:{name:v.realpath,type:'file',ctime:v.ctime,mtime:v.mtime,size:v.size});
       const s:Snapshot={version:2,api:this.port.api,root:this.a.basePath,scope:this.scope,entries,normalScanMs:this.normalScanMs};
-      if(validSnapshot(s,this.a.basePath,this.scope,this.port.api)){this.port.save(s);this.snapshot=s;}
+      if(validSnapshot(s,this.a.basePath,this.scope,this.port.api,this.port.allowUnverified)){this.port.save(s);this.snapshot=s;}
     }catch{this.report('snapshotFailed');}
   }
   contentChanged():void {

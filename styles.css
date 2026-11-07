@@ -7,7 +7,7 @@
 .boot-booster-record-section { scroll-margin-top: 88px; }
 .boot-booster-records { max-width: 100%; overflow-x: auto; margin-top: var(--size-4-3); }
 .boot-booster-history .setting-item-control { justify-content: flex-start; margin-block: var(--size-4-3); }
-.boot-booster-history .boot-booster-records + a { display: inline-block; margin-top: var(--size-4-2); }
+.boot-booster-history .boot-booster-records + a:not([hidden]) { display: inline-block; margin-top: var(--size-4-2); }
 .boot-booster-record-json[open] > textarea { margin-top: var(--size-4-2); }
 .boot-booster-measurements { border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .boot-booster-measurements th, .boot-booster-measurements td { padding: var(--size-4-2); text-align: left; white-space: nowrap; }

@@ -3,7 +3,7 @@ import {patchMethods} from './method-patch';
 import {record,isRecord,isMethod,isThenable} from './runtime';
 const MIN=512*1024,MAX=32*1024*1024;
 export interface PluginFilePort {
- api:string;adapter:unknown;manifests:unknown;configDir:string;
+ api:string;adapter:unknown;manifests:unknown;configDir:string;allowUnverified?:boolean;
  load():unknown;save(sizes:Record<string,number>):void;
  fetch?:typeof fetch;timeoutMs?:number;
 }
@@ -18,7 +18,7 @@ export class PluginFiles {
  install():boolean{
   if(this.disposeRead)return true;
   const p=this.port,a=record(p.adapter),fs=record(a.fs),original=fs.read;
-  if(this.stopped||!supportsAndroidAdapter(p.api)||!isMethod(original)||!isMethod(a.queue)||!isMethod(a.getFullPath)||!isMethod(a.getResourcePath))return false;
+  if(this.stopped||!supportsAndroidAdapter(p.api,p.allowUnverified)||!isMethod(original)||!isMethod(a.queue)||!isMethod(a.getFullPath)||!isMethod(a.getResourcePath))return false;
   try{const saved=p.load();if(isRecord(saved))for(const [k,v] of Object.entries(saved))if(typeof v==='number'&&Number.isFinite(v)&&v>=0)this.sizes[k]=v;}catch{/* Learn sizes from native reads instead. */}
   const targets=new Map<string,{key:string;uri:string}>();
   for(const value of Object.values(record(p.manifests))){

@@ -1,6 +1,24 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
-import {compareStartups,comparisonText,inventoryStatus,inventorySaving} from '../src/feedback';import type {StartupRun} from '../src/benchmark';
-function run(mode:'optimized'|'measurement-only',ms:number):StartupRun{return {id:mode+ms,startedAt:'2026-10-12T00:00:00Z',kind:'startup',status:'complete',environment:{bootBooster:'1.11.0',api:'1.14.4',model:'Lab'},condition:{enabled:true,mode},configuration:{settingsLoaded:true,fastMode:'always',scope:{all:true,folderCount:0},startup:{workspace:true,pluginFiles:true,fastTabs:false}},bootBoosterOnloadMs:10,recorderSetupMs:0,milestones:{pluginStartedMs:500,layoutReadyMs:ms,uiReadyMs:ms,metadataResolvedMs:ms+100,verificationMs:null,pluginsSettledMs:ms,settledMs:ms+2000},phases:{},plugins:{example:{version:'1',beforeRecorder:false,loads:[]}},counts:{files:10000,tabs:40,deferredTabs:39},fastStart:null,startup:null,interaction:{firstMs:null,events:0,hidden:false},unavailable:[]};}
+import {compareStartups,comparisonText,inventoryStatus,inventorySaving,startupApplication} from '../src/feedback';import type {StartupRun} from '../src/benchmark';
+function run(mode:'optimized'|'measurement-only',ms:number):StartupRun{return {id:mode+ms,startedAt:'2026-10-12T00:00:00Z',kind:'startup',status:'complete',environment:{bootBooster:'1.11.0',api:'1.14.4',model:'Lab'},condition:{enabled:true,mode},configuration:{settingsLoaded:true,fastMode:'always',scope:{all:true,folderCount:0},startup:{workspace:true,pluginFiles:true,fastTabs:false}},bootBoosterOnloadMs:10,recorderSetupMs:0,milestones:{pluginStartedMs:500,layoutReadyMs:ms,uiReadyMs:ms,metadataResolvedMs:ms+100,verificationMs:null,pluginsSettledMs:ms,settledMs:ms+2000},phases:{},plugins:{example:{version:'1',beforeRecorder:false,loads:[]}},counts:{files:10000,tabs:40,deferredTabs:39},fastStart:mode==='optimized'?{phase:'verified',seeded:10000}:null,startup:null,interaction:{firstMs:null,events:0,hidden:false},unavailable:[]};}
+
+test('history application uses observed work rather than the requested mode',()=>{
+ const r=run('optimized',3000);assert.equal(startupApplication(r).state,'applied');
+ r.fastStart={phase:'unsupported'};r.configuration.compatibility={allowed:false,android:true};assert.equal(startupApplication(r).state,'none');
+ assert.equal(startupApplication(r).label,'未適用');
+ r.configuration.compatibility={allowed:true,android:true};r.fastStart={phase:'normal'};assert.equal(startupApplication(r).state,'none');
+ for(const startup of [{hintedWorkspaceViews:3},{pluginFiles:{streamReads:1}},{metadataPreloadStarted:true}]){r.startup=startup;assert.equal(startupApplication(r).state,'partial');}
+ r.fastStart={phase:'failed',seeded:10};assert.equal(startupApplication(r).state,'failed');
+ r.fastStart=null;r.startup=null;delete r.configuration.compatibility;assert.equal(startupApplication(r).state,'unknown');
+ r.condition.mode='measurement-only';assert.equal(startupApplication(r).label,'通常');
+});
+
+test('unapplied and unknown optimized-mode records cannot inflate speed comparisons',()=>{
+ const normal=run('measurement-only',10000),fast=run('optimized',3000);
+ fast.fastStart={phase:'unsupported'};assert.equal(compareStartups([normal,fast]),null);
+ fast.fastStart=null;assert.equal(compareStartups([normal,fast]),null);
+ fast.startup={metadataPreloadStarted:true};assert.equal(compareStartups([normal,fast])?.savedMs,7000);
+});
 test('startup reference is measured locally with medians and signed differences',()=>{
  const history=[run('measurement-only',10000),run('measurement-only',12000),run('optimized',4000),run('optimized',6000)],c=compareStartups(history)!;
  assert.equal(c.normalMs,11000);assert.equal(c.optimizedMs,5000);assert.equal(c.savedMs,6000);assert.equal(c.normalCount,2);assert.ok(comparisonText(c).includes('短縮'));
