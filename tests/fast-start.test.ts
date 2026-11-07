@@ -5,7 +5,7 @@ const scope:Scope={all:false,folders:['Archive']};
 // Obsidian supplies browser timers for the non-simulated scheduler test.
 (globalThis as any).window=globalThis;
 const base:Snapshot={version:2,root:'/vault',api:'1.13.8',scope,entries:[dir('Archive'),file('Archive/a.md')]};
-function fixture(s:Snapshot=base,mode:'auto'|'always'='always',api='1.13.8'){
+function fixture(s:Snapshot=base,mode:'auto'|'always'='always',api='1.13.8',allowUnverified=false){
  const disk=new Map([dir('Archive'),file('Archive/a.md'),dir('Other'),file('Other/b.md'),file('active.md')].map(e=>[e.name,e]));
  let scans=0,writes=0,watch=0,now=10000;const timers:Function[]=[];let saved:Snapshot|undefined;
  const scheduler=new IdleScheduler(()=>true,()=>now,async ms=>{now+=ms;});
@@ -16,7 +16,7 @@ function fixture(s:Snapshot=base,mode:'auto'|'always'='always',api='1.13.8'){
  queue:(fn:()=>unknown)=>{a.promise=a.promise.then(fn,fn);return a.promise;},
  watchAndList:async()=>{scans++;a.files={'/':{type:'folder',realpath:'/'}};for(const e of disk.values())a.quickList('',e);},
  read:async()=> 'body',readBinary:async()=>new ArrayBuffer(0),stat:async()=>null,write:async()=>{writes++;},process:async()=>{writes++;},rename:async()=>{writes++;},remove:async()=>{writes++;},list:async()=>({})};
- const fast=new FastStart({api,adapter:a,scope:s.scope,mode,scheduler,load:()=>s,save:s=>{saved=s;},changed:()=>{},defer:fn=>timers.push(fn)});fast.install();
+ const fast=new FastStart({api,allowUnverified,adapter:a,scope:s.scope,mode,scheduler,load:()=>s,save:s=>{saved=s;},changed:()=>{},defer:fn=>timers.push(fn)});fast.install();
  return {a,fast,disk,scheduler,scans:()=>scans,writes:()=>writes,watch:()=>watch,saved:()=>saved,flush:async()=>{for(const fn of timers.splice(0))fn();await new Promise(r=>setImmediate(r));}};
 }
 test('live scan progress follows native directory I/O and clears after verification',async()=>{
@@ -67,6 +67,19 @@ test('stale absence cannot be used to overwrite an externally created destinatio
 test('configuration and diagnostic writes remain outside the content guard',async()=>{const f=fixture();await f.a.watchAndList();await f.a.write('.obsidian/plugin/data.json','{}');assert.equal(f.writes(),1);});
 test('stat permission failure blocks a mutation without pretending it is deletion',async()=>{const f=fixture();await f.a.watchAndList();f.a.fs.stat=async()=>{throw Error('denied');};await assert.rejects(f.a.write('Archive/a.md','x'));assert.equal(f.writes(),0);assert.ok(f.a.files['Archive/a.md']);});
 test('unsupported versions leave the adapter untouched',()=>{const f=fixture();f.fast.dispose();const original=f.a.watchAndList;const fast=new FastStart({api:'1.14.0',adapter:f.a,scope,load:()=>base,save:()=>{},changed:()=>{},defer:()=>{}});assert.equal(fast.install(),false);assert.equal(f.a.watchAndList,original);});
+
+test('consented versions retain snapshot, structural and stale-write guards',async()=>{
+ const f=fixture(base,'always','9.9.9',true);await f.a.watchAndList();assert.equal(f.fast.phase,'provisional');assert.equal(f.scans(),0);
+ f.disk.set('Archive/a.md',file('Archive/a.md',9));await assert.rejects(f.a.write('Archive/a.md','stale'));assert.equal(f.writes(),0);await f.fast.verify();await f.fast.dispose();
+ delete f.a.fs.stat;const native=f.a.watchAndList;
+ const missing=new FastStart({api:'9.9.9',allowUnverified:true,adapter:f.a,scope,load:()=>base,save:()=>{},changed:()=>{},defer:()=>{}});
+ assert.equal(missing.install(),false);assert.equal(missing.reasonKey,'missingApi');assert.equal(f.a.watchAndList,native);
+});
+
+test('1.15.0 reuses validated earlier inventories without opting into arbitrary stored versions',async()=>{
+ const f=fixture(base,'always','1.15.0');await f.a.watchAndList();assert.equal(f.fast.phase,'provisional');await f.fast.verify();await f.fast.dispose();
+ assert.equal(validSnapshot({...base,api:'9.9.9'},'/vault',scope,'1.15.0'),false);
+});
 test('1.14.4 retains the validated 1.13.8 inventory on the first updated boot',async()=>{
  const f=fixture(base,'always','1.14.4');await f.a.watchAndList();assert.equal(f.scans(),0);assert.equal(f.fast.phase,'provisional');await f.fast.verify();await f.flush();assert.equal(f.saved()?.api,'1.14.4');
 });

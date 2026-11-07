@@ -5,9 +5,9 @@ import {record,isMethod,UnknownRecord,HostMethod} from './runtime';
 /** Match the native DeferredView branch only for a new, hidden startup leaf.
  * Native restoration stores its state without reading the file. The eventual
  * rerender is not an empty leaf and must still pass foreground verification. */
-export function defersInitialView(value:unknown,rawState:unknown,api:string):boolean {
+export function defersInitialView(value:unknown,rawState:unknown,api:string,allowUnverified=false):boolean {
   const leaf=record(value),state=record(rawState),app=record(leaf.app),container=record(leaf.containerEl),registry=record(app.viewRegistry);
-  if(!supportsAndroidAdapter(api)||record(app.workspace).layoutReady!==false||!leaf._empty||leaf.view!==leaf._empty||
+  if(!supportsAndroidAdapter(api,allowUnverified)||record(app.workspace).layoutReady!==false||!leaf._empty||leaf.view!==leaf._empty||
     state.type==='empty'||typeof state.type!=='string'||!state.icon||typeof state.title!=='string'||
     !isMethod(container.isShown)||!isMethod(registry.getViewCreatorByType))return false;
   try{return !container.isShown()&&!!registry.getViewCreatorByType(state.type);}catch{return false;}

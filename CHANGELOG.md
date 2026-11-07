@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.14.7
+
+- Support Android Obsidian 1.15.0.
+- Ask once when an unverified app version uses normal startup. Allow trying that version from the next startup, or automatically trying later versions through a device-local setting.
+- Keep internal capability checks and file verification active when an unverified version is permitted.
+- Show observed optimization results in the existing startup-history column, distinguishing applied, partially applied and unapplied runs. Exclude unapplied runs from speed comparisons.
+
 ## 1.14.6
 
 - Folder renames, moves and deletions verify the requested subtree instead of waiting for the entire background inventory. Unexpected contents are reconciled before the operation can be retried.

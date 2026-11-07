@@ -4,10 +4,10 @@ import {record,isMethod,callMethod} from './runtime';
 
 /** Keep native tab rendering, selection, pinning and Android back navigation.
  * Only omit the optional native screenshot; never replace file/editor reads. */
-export function fastTabs(switcherValue:unknown,bridgeValue:unknown,workspaceValue:unknown,appId:string,api:string,enabled:()=>boolean,skipped:()=>void=()=>{}):()=>void {
+export function fastTabs(switcherValue:unknown,bridgeValue:unknown,workspaceValue:unknown,appId:string,api:string,enabled:()=>boolean,skipped:()=>void=()=>{},allowUnverified=false):()=>void {
   const switcher=record(switcherValue),bridge=record(bridgeValue),workspace=record(workspaceValue);
   const originalShow=switcher.show,originalNative=bridge.nativePromise,recentLeaf=workspace.getMostRecentLeaf;
-  if(!supportsAndroidAdapter(api)||!isMethod(originalShow)||!isMethod(originalNative)||!isMethod(recentLeaf)||
+  if(!supportsAndroidAdapter(api,allowUnverified)||!isMethod(originalShow)||!isMethod(originalNative)||!isMethod(recentLeaf)||
     !/takeScreenshot/.test(Function.prototype.toString.call(originalShow)))return ()=>{};
   const paths=new Map<string,number>();let stopped=false;
   const native=function(this:unknown,plugin:string,method:string,options:unknown,...args:unknown[]){

@@ -11,13 +11,13 @@ export class WorkspaceOptimizer {
   private stopped=false;private disposers:(()=>void)[]=[];
   private labels:Record<string,ViewLabel>={};private dirty=false;private saving=false;
   private key:string;hinted=0;reason='';
-  constructor(private app:App,private settings:StartupSettings,private scheduler:IdleScheduler){
+  constructor(private app:App,private settings:StartupSettings,private scheduler:IdleScheduler,private allowUnverified=false){
     this.key=`boot-booster:workspace:v1:${apiVersion}:${app.vault.adapter.getResourcePath('')}`;
   }
   install():void{
     if(this.stopped||this.disposers.length)return;
     const w=record(this.app.workspace),original=w.readWorkspaceFile;
-    if(!this.settings.workspace||!Platform.isAndroidApp||!supportsAndroidAdapter(apiVersion)||!isMethod(original)){
+    if(!this.settings.workspace||!Platform.isAndroidApp||!supportsAndroidAdapter(apiVersion,this.allowUnverified)||!isMethod(original)){
       this.reason='Native workspace restoration';return;
     }
     try{const data=record(parseJSON(window.localStorage.getItem(this.key)||'null'));if(data.version===1)

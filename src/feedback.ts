@@ -6,6 +6,19 @@ import {record} from './runtime';
 import {japanese,Translator} from './i18n';
 export const seconds=(ms:number,t:Translator=japanese):string=>t('seconds',{value:(ms/1000).toFixed(1)});
 const finite=(value:unknown):value is number=>typeof value==='number'&&Number.isFinite(value)&&value>=0;
+export function startupApplication(run:StartupRun,t:Translator=japanese):{state:'applied'|'partial'|'none'|'pending'|'unknown'|'failed';label:string;detail:string}{
+  const c=record(run.configuration),compatibility=record(c.compatibility),fast=record(run.fastStart),startup=record(run.startup);
+  const result=(state:'applied'|'partial'|'none'|'pending'|'unknown'|'failed',key:Parameters<Translator>[0],reason:Parameters<Translator>[0])=>({state,label:t(key),detail:t(reason)});
+  if(run.condition.mode==='measurement-only'||c.optimizationEnabled===false)return result('none','normal','normalStartup');
+  if(fast.phase==='failed')return result('failed','applicationFailed','failedHelp');
+  if(typeof fast.seeded==='number'&&fast.seeded>0&&['provisional','reconciling','verified'].includes(String(fast.phase)))return result('applied','applied','appliedHelp');
+  const files=record(startup.pluginFiles);
+  if((typeof startup.hintedWorkspaceViews==='number'&&startup.hintedWorkspaceViews>0)||(typeof files.streamReads==='number'&&files.streamReads>0)||startup.metadataPreloadStarted===true)return result('partial','partlyApplied','partlyAppliedHelp');
+  if(compatibility.android===false||compatibility.allowed===false)return result('none','notApplied','notAppliedVersion');
+  if(run.status==='in-progress'&&fast.phase!=='unsupported'&&fast.phase!=='normal')return result('pending','inProgress','applicationPending');
+  if(fast.phase==='normal'||fast.phase==='unsupported'||compatibility.allowed===true)return result('none','notApplied','notAppliedHelp');
+  return result('unknown','applicationUnknown','applicationUnknownHelp');
+}
 export function inventoryStatus(fast:FastStart|null,waiting:IdleScheduler['waitingFor'],mode:'optimized'|'measurement-only',available:boolean,t:Translator=japanese):{title:string;detail:string;work:string;next:string} {
   const simple=(key:Parameters<Translator>[0])=>({title:t(key),detail:'',work:'',next:''});
   if(mode==='measurement-only')return simple('normalStartup');
@@ -56,7 +69,7 @@ export function compareStartups(history:StartupRun[],anchor?:StartupRun):Startup
   const reference=anchor??history[history.length-1];if(!reference)return null;
   const key=comparisonKey(reference);if(!key)return null;
   const matching=history.filter(run=>usable(run)&&comparisonKey(run)===key);
-  const values=(mode:string)=>matching.filter(run=>run.condition.mode===mode).map(run=>run.milestones.uiReadyMs!).sort((a,b)=>a-b);
+  const values=(mode:string)=>matching.filter(run=>run.condition.mode===mode&&(mode==='measurement-only'||['applied','partial'].includes(startupApplication(run).state))).map(run=>run.milestones.uiReadyMs!).sort((a,b)=>a-b);
   const normal=values('measurement-only'),optimized=values('optimized');if(!normal.length||!optimized.length)return null;
   const median=(a:number[])=>a.length%2?a[(a.length-1)/2]:(a[a.length/2-1]+a[a.length/2])/2;
   const normalMs=median(normal),optimizedMs=median(optimized),savedMs=normalMs-optimizedMs;
