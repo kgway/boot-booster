@@ -19,6 +19,7 @@ const visible=(p:string)=>p.split('/').every(s=>s&&!s.startsWith('.')&&!['__prot
 // keep its guards without a second instance nesting another provisional scan.
 const inventoryOwner=Symbol.for('boot-booster.inventory-owner.v1');
 type FolderProof={root:string;entries:Map<string,string>;revision:number};
+const maxScanInputWait=160;
 function validEntry(value:unknown):value is Entry {
   const e=record(value);
   return !!e&&typeof e.name==='string'&&visible(e.name)&&!e.name.includes('\\')&&e.name===e.name.normalize('NFC')&&
@@ -49,6 +50,7 @@ export class FastStart {
   private a!:AndroidInventoryAdapter;private scope:Scope;private snapshot:Snapshot|null=null;private normalScanMs?:number;
   private patches:MethodPatch[]=[];private undo:(()=>void)|null=null;
   private reconciliation:Promise<void>|null=null;private stopped=false;
+  private refreshRequested=false;
   private disposed=false;private disposal:Promise<void>|null=null;private installed=false;
   private starting:Promise<void>|null=null;
   private changes=new Map<string,number>();private touched=new Set<string>();private revision=0;
@@ -114,7 +116,7 @@ export class FastStart {
         this.inventoryMs=performance.now()-inventoryStart;this.progress.stage='waiting';
         this.seeded=cached.length;this.report('background');
       }catch(e){this.phase='failed';this.report('seedFailed');throw e;}finally{this.finishSeed();}
-      this.port.defer(()=>{void this.verify().catch(()=>{});},2000);
+      this.port.defer(()=>{void this.verify().catch(()=>{});},0);
     };
     this.wrap('watchAndList',(...args:unknown[])=>{
       if(this.starting)return this.starting;
@@ -221,7 +223,7 @@ export class FastStart {
     if(background){this.background.directories++;this.background.nativeListMs+=performance.now()-start;}
     if(!Array.isArray(raw))throw Error('Invalid directory response');
     const entries:Entry[]=[];const names=new Set<string>();
-    for(let i=0;i<raw.length;i++){if(background&&i%64===0)await this.scheduler.checkpoint();const child=record(raw[i]);if(typeof child.name!=='string'||child.name.includes('/')||child.name.includes('\\'))throw Error('Invalid child path');
+    for(let i=0;i<raw.length;i++){if(background&&i>0&&i%64===0)await this.scanCheckpoint();const child=record(raw[i]);if(typeof child.name!=='string'||child.name.includes('/')||child.name.includes('\\'))throw Error('Invalid child path');
       const e={...child,name:path?path+'/'+child.name:child.name};if(!visible(e.name))continue;
       if(!validEntry(e)||names.has(e.name))throw Error('Invalid directory entry');names.add(e.name);entries.push(e);}
     return entries;
@@ -279,38 +281,60 @@ export class FastStart {
   verify():Promise<void>{
     if(this.phase==='failed')return Promise.reject(Error('File verification failed; restart required'));
     if(this.reconciliation)return this.reconciliation;if(!this.pending())return Promise.resolve();
-    this.reconciliation=this.scan();void this.reconciliation.catch(()=>{});return this.reconciliation;
+    return this.startScan(false);
   }
+  /** Native notifications can be missed while Android suspends the WebView. */
+  refreshAfterResume():Promise<void>{
+    if(this.disposed||this.stopped||this.phase==='failed'||this.provisionalAtMs===null)return Promise.resolve();
+    if(this.reconciliation){this.refreshRequested=true;return this.reconciliation;}
+    if(this.phase==='verified'){this.phase='reconciling';return this.startScan(true);}
+    return this.verify();
+  }
+  private startScan(refresh:boolean):Promise<void>{
+    const task=this.scan(refresh).finally(()=>{this.reconciliation=null;});
+    this.reconciliation=task;void task.catch(()=>{});return task;
+  }
+  private scanCheckpoint():Promise<void>{return this.scheduler.checkpoint(0);}
   private assertHealthy():void {if(this.phase==='failed')throw Error('File verification failed; restart required');}
-  private async scan():Promise<void>{
+  private async scan(refresh:boolean):Promise<void>{
     try{
-      await this.seedDone;this.progress.stage='waiting-layout';await this.port.ready?.();this.phase='reconciling';this.progress.stage='waiting';await this.scheduler.idle();this.background.startedAtMs=performance.now();
-      // watch() is the adapter's native watcher setup without a full stat-all request.
-      this.progress.stage='watching';this.progress.nativePending=true;const watchAt=performance.now();
-      try{await this.a.fs.watch(this.a.basePath);}finally{this.background.watchMs+=performance.now()-watchAt;this.progress.nativePending=false;this.progress.stage='indexing';}
+      await this.seedDone;this.progress.stage='waiting-layout';await this.port.ready?.();this.phase='reconciling';
+      if(refresh){await this.a.queue(()=>{});}else{
+        // Start native notifications independently of input or foreground waits.
+        this.progress.stage='watching';this.progress.nativePending=true;const watchAt=performance.now();
+        try{await this.a.fs.watch(this.a.basePath);}finally{this.background.watchMs+=performance.now()-watchAt;this.progress.nativePending=false;}
+      }
+      this.progress.stage='waiting';await this.scheduler.inputGrace(maxScanInputWait);this.background.startedAtMs??=performance.now();
+      do{
+      this.refreshRequested=false;this.progress.stage='indexing';
       // One linear inventory pass, instead of scanning every file for every folder.
-      const indexAt=performance.now();this.children=new Map();const inventory=Object.keys(this.a.files);for(let i=0;i<inventory.length;i++){if(i%128===0)await this.scheduler.checkpoint();this.indexChild(inventory[i]);}this.background.indexMs+=performance.now()-indexAt;
+      const indexAt=performance.now();this.children=new Map();const inventory=Object.keys(this.a.files);for(let i=0;i<inventory.length;i++){if(i%128===0)await this.scanCheckpoint();this.indexChild(inventory[i]);}this.background.indexMs+=performance.now()-indexAt;
       const queue=[''];
-      for(let head=0;head<queue.length;head++){await this.scheduler.checkpoint();await this.scanDirectory(queue[head],true,queue);}
+      for(let head=0;head<queue.length;head++){await this.scanCheckpoint();await this.scanDirectory(queue[head],true,queue);}
       queue.length=0;
-      for(;;){while(this.touched.size){await this.scheduler.checkpoint();const paths=[...this.touched];this.touched.clear();
-        for(const p of paths){if(!visible(p))continue;await this.scheduler.checkpoint();await this.ensurePath(p);if(this.a.files[p]?.type==='folder')queue.push(p);}
-        for(let head=0;head<queue.length;head++){await this.scheduler.checkpoint();await this.scanDirectory(queue[head],true,queue);}queue.length=0;
+      for(;;){while(this.touched.size){await this.scanCheckpoint();const paths=[...this.touched];this.touched.clear();
+        for(const p of paths){if(!visible(p))continue;await this.scanCheckpoint();await this.ensurePath(p);if(this.a.files[p]?.type==='folder')queue.push(p);}
+        for(let head=0;head<queue.length;head++){await this.scanCheckpoint();await this.scanDirectory(queue[head],true,queue);}queue.length=0;
       }
       // The final yield is an event boundary too. Do not discard notifications
       // or finish while a delegated mutation is still in flight.
-      this.progress.stage='finishing';await this.scheduler.idle();if(this.stopped)return;
+      this.progress.stage='finishing';await this.scheduler.inputGrace(0);if(this.stopped)return;
       if(!this.touched.size&&!this.points.size&&!this.folderChecks&&![...this.inflight.values()].some(count=>count>0))break;
       }
-      this.phase='verified';this.progress.stage='done';this.progress.path='';this.inventoryReady=true;this.verifiedAtMs=performance.now();this.report('ready');this.contentChanged();
+      }while(this.refreshRequested&&!this.disposed);
+      this.phase='verified';this.progress.stage='done';this.progress.path='';this.inventoryReady=true;this.verifiedAtMs??=performance.now();this.report('ready');this.contentChanged();
       this.confirmed.clear();this.changes.clear();this.inflight.clear();this.children=null;
-    }catch(e){if(this.stopped)return;this.phase='failed';this.progress.stage='failed';this.report('verificationFailed');throw e;}
+    }catch(e){if(this.stopped)return;
+      if(refresh){this.phase='verified';this.progress.stage='done';this.progress.path='';this.children=null;this.changes.clear();this.touched.clear();this.confirmed.clear();this.report('refreshFailed');}
+      else{this.phase='failed';this.progress.stage='failed';this.report('verificationFailed');}
+      throw e;
+    }
   }
   private async scanDirectory(path:string,background:boolean,queue:string[],knownChildren?:Iterable<string>):Promise<void>{
     const fence=this.revision;let entries:Entry[];
     try{entries=await this.directory(path,background);}catch(e){if(path&&record(e).code==='ENOENT'){await this.ensurePath(path);return;}throw e;}
     const names=new Set(entries.map(e=>e.name));
-    for(let i=0;i<entries.length;i+=64){if(background)await this.scheduler.checkpoint();const batch=entries.slice(i,i+64),queuedAt=performance.now();
+    for(let i=0;i<entries.length;i+=64){if(background&&i>0)await this.scanCheckpoint();const batch=entries.slice(i,i+64),queuedAt=performance.now();
       // Confirm unchanged entries without joining Obsidian's content I/O queue.
       // This only updates our read-verification map, never the Vault inventory.
       // Changed entries still use the adapter queue and recheck the revision fence.
@@ -328,7 +352,7 @@ export class FastStart {
     }
     const candidates=knownChildren??(this.children?(this.children.get(path)??[]):Object.keys(this.a.files).filter(p=>p!=='/'&&this.parent(p)===path));
     const missing=[...new Set([...candidates,...(knownChildren??[])])].filter(p=>!names.has(p)&&this.a.files[p]);
-    for(const p of missing){if(background){await this.scheduler.checkpoint();this.background.missingChecks++;}await this.ensurePath(p);}
+    for(const p of missing){if(background){await this.scanCheckpoint();this.background.missingChecks++;}await this.ensurePath(p);}
   }
   private matches(e:Entry):boolean {
     const old=this.a.files[e.name],type=e.type==='directory'?'folder':'file';
@@ -368,7 +392,7 @@ export class FastStart {
   }
   private retireInventory():Promise<void>{
     if(this.pending()&&this.phase!=='failed'){
-      this.scheduler.drain();return this.verify().then(()=>this.unpatch(),()=>{this.scheduler.stop();});
+      this.scheduler.drain();return this.verify().then(()=>this.unpatch(),()=>{if(this.phase==='verified')this.unpatch();else this.scheduler.stop();});
     }else{if(this.phase==='failed')this.scheduler.stop();else this.unpatch();}
     // A failed provisional inventory retains its read/write guards until the
     // app restarts. It is never silently repaired or admitted to a new owner.

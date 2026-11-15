@@ -9,14 +9,16 @@
 2. ZIP内の `boot-booster` をVaultの `.obsidian/plugins/` に置きます。
 3. 更新時は `main.js`・`manifest.json`・`styles.css` の3ファイルだけを置き換えます。
    既存の `data.json` を削除したり、プラグインのフォルダごと置き換えたりしないでください。
-4. Obsidianを起動し、Boot Boosterを有効にします。確認済みのAndroid APIは1.13.8 / 1.14.4 / 1.15.0です。
+4. Obsidianを起動し、Boot Boosterを有効にします。確認済みのAndroid APIは1.13.8 / 1.14.4 / 1.15.0 / 1.15.1です。
    未確認版は通常起動し、起動後に使用するか尋ねます。初回は一覧とプラグイン本体のサイズを学習し、次回から利用します。
 
 設定・通知・コマンドは日本語と英語に対応しています。Obsidianが日本語なら日本語、それ以外なら英語が初期表示です。「言語」で切り替えると即時反映し、この端末だけに保存します。
 
 ## 今回確認すること
 
-- 1.14.7では、Obsidian 1.15.0で高速化が動き、起動記録の「適用」が実際の結果を示すことを確認してください。「一部適用」はファイル一覧以外の処理だけが動いた場合です。
+- 1.14.8では、Obsidianを閉じている間と別アプリに切り替えている間に、外部のファイル管理アプリで試しのノートをVaultのフォルダに追加し、Obsidianを開いた後で一覧へ出ることを確認してください。試しのノートを外部で編集・削除した場合も確認できます。
+
+- Obsidian 1.15.1で起動し、起動記録の「適用」を確認してください。「自動」では、アプリ更新後に通常起動を測り直します。
 - 設定の「未確認のバージョンでも自動で使う」は、今後の未確認版を許可する端末内の設定です。オンにすると確認画面は出ません。許可や取り消しは次回起動から有効です。
 - 起動時のノート選択、ノートを開く操作、フォルダの作成・リネーム・削除が普段どおり使えることを確認してください。
 
@@ -55,7 +57,7 @@ Close Obsidian and back up your vault before installing. Extract `boot-booster` 
 
 For 1.14.6, create, rename and delete a test folder during and after inventory verification. Include a test note and confirm that it opens after moving the folder. Deleted folders should stay deleted and new folders should remain visible. Check that the selected startup note behaves as before.
 
-Validated Android versions are Obsidian API 1.13.8 / 1.14.4 / 1.15.0. Other versions use normal startup until permitted on this device. The first startup builds a reference inventory. The interface starts in Japanese when Obsidian uses Japanese, and in English otherwise. The Language dropdown switches it immediately and saves the preference on this device.
+Validated Android versions are Obsidian API 1.13.8 / 1.14.4 / 1.15.0 / 1.15.1. Other versions use normal startup until permitted on this device. The first startup builds a reference inventory. Automatic mode measures normal startup again after an app update. The interface starts in Japanese when Obsidian uses Japanese, and in English otherwise. The Language dropdown switches it immediately and saves the preference on this device.
 
 History, its small Show all link, Copy, Clear history and JSON share one setting item. Copy and clear work with JSON closed. Startup status and diagnostics share another item. Measure normal startup disables optimizations for reference measurements; restart for each run. Timings are local observations, not native app launch time or predictions.
 

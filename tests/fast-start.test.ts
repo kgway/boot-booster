@@ -80,6 +80,12 @@ test('1.15.0 reuses validated earlier inventories without opting into arbitrary 
  const f=fixture(base,'always','1.15.0');await f.a.watchAndList();assert.equal(f.fast.phase,'provisional');await f.fast.verify();await f.fast.dispose();
  assert.equal(validSnapshot({...base,api:'9.9.9'},'/vault',scope,'1.15.0'),false);
 });
+
+test('1.15.1 can reuse a 1.15.0 snapshot in always mode while auto remeasures the native scan',async()=>{
+ const s={...base,api:'1.15.0',normalScanMs:5000,entries:[dir('Archive'),...Array.from({length:1000},(_,i)=>file(`Archive/${i}.md`))]};
+ const cached=fixture(s,'always','1.15.1');await cached.a.watchAndList();assert.equal(cached.fast.phase,'provisional');await cached.fast.dispose();
+ const auto=fixture(s,'auto','1.15.1');await auto.a.watchAndList();assert.equal(auto.scans(),1);assert.equal(auto.fast.phase,'normal');await auto.fast.dispose();
+});
 test('1.14.4 retains the validated 1.13.8 inventory on the first updated boot',async()=>{
  const f=fixture(base,'always','1.14.4');await f.a.watchAndList();assert.equal(f.scans(),0);assert.equal(f.fast.phase,'provisional');await f.fast.verify();await f.flush();assert.equal(f.saved()?.api,'1.14.4');
 });
@@ -183,12 +189,35 @@ test('unchanged inventories finish without re-recognizing files and report nativ
  await f.fast.verify();assert.equal(recognized,0);assert.equal(f.fast.background.updated,0);assert.equal(f.fast.background.unchanged,f.disk.size);assert.equal(f.fast.background.directories,3);assert.ok(f.fast.background.startedAtMs!==null);assert.equal(f.writes(),0);
 });
 
-test('a large directory pauses after input arrives during native enumeration, then still reconciles every entry',async()=>{
+test('a large directory finishes reconciliation even during continuous input',async()=>{
  const f=fixture();for(let i=0;i<1000;i++)f.disk.set('Archive/f'+i+'.md',file('Archive/f'+i+'.md'));await f.a.watchAndList();
- const readdir=f.a.fs.readdir;let triggered=false,paused=false;
- f.a.fs.readdir=async(path:string)=>{const rows=await readdir(path);if(path==='/vault/Archive'){triggered=true;f.scheduler.activity(160);}return rows;};
- const idle=f.scheduler.idle.bind(f.scheduler);f.scheduler.idle=async()=>{if(triggered&&f.fast.scanned<1000)paused=true;await idle();};
- await f.fast.verify();assert.equal(paused,true);assert.equal(f.fast.phase,'verified');assert.equal(f.fast.scanned,f.disk.size);assert.ok(f.scheduler.timing.quietMs>=160);assert.equal(f.writes(),0);
+ const readdir=f.a.fs.readdir;f.scheduler.activity(600000);
+ f.a.fs.readdir=async(path:string)=>{f.scheduler.activity(600000);return readdir(path);};
+ await f.fast.verify();assert.equal(f.fast.phase,'verified');assert.equal(f.fast.scanned,f.disk.size);assert.equal(f.scheduler.timing.quietMs,160);assert.equal(f.writes(),0);
+});
+
+test('external monitoring starts even when a foreground view holds the inventory scan',async()=>{
+ const f=fixture();await f.a.watchAndList();const release=f.scheduler.beginForeground();
+ let resume!:()=>void;const gate=new Promise<void>(resolve=>{resume=resolve;});
+ const idle=f.scheduler.idle.bind(f.scheduler);f.scheduler.idle=async(...args)=>{await gate;await idle(...args);};
+ const scan=f.fast.verify();await new Promise(r=>setImmediate(r));
+ try{assert.equal(f.watch(),1);assert.equal(f.fast.scanned,0);}finally{release();resume();await scan;}
+});
+
+test('returning to the app finds unnotified nested adds, edits and deletes without restarting the native watcher',async()=>{
+ const f=fixture();await f.a.watchAndList();await f.fast.verify();const originalTime=f.fast.verifiedAtMs;
+ f.disk.delete('Archive/a.md');f.disk.set('Archive/New',dir('Archive/New'));f.disk.set('Archive/New/n.md',file('Archive/New/n.md'));f.disk.set('Other/b.md',file('Other/b.md',80));
+ await f.fast.refreshAfterResume();assert.equal(f.a.files['Archive/a.md'],undefined);assert.ok(f.a.files['Archive/New/n.md']);assert.equal(f.a.files['Other/b.md'].mtime,80);
+ assert.equal(f.fast.verifiedAtMs,originalTime);assert.equal(f.watch(),1);assert.equal(f.scans(),0);assert.equal(f.writes(),0);
+});
+
+test('returning during a scan retries directories already passed and a failed later refresh remains retryable',async()=>{
+ const f=fixture();await f.a.watchAndList();const list=f.a.fs.readdir;let renewed=false;
+ f.a.fs.readdir=async(path:string)=>{if(path.endsWith('/Other')&&!renewed){renewed=true;f.disk.set('Archive/back.md',file('Archive/back.md'));void f.fast.refreshAfterResume();}return list(path);};
+ await f.fast.verify();assert.ok(f.a.files['Archive/back.md']);
+ f.a.fs.readdir=async()=>{throw Error('permission unavailable');};await assert.rejects(f.fast.refreshAfterResume(),/permission/);
+ assert.equal(f.fast.phase,'verified');assert.equal(f.fast.reasonKey,'refreshFailed');assert.equal(await f.a.read('Archive/a.md'),'body');
+ f.a.fs.readdir=list;f.disk.set('Archive/retry.md',file('Archive/retry.md'));await f.fast.refreshAfterResume();assert.ok(f.a.files['Archive/retry.md']);assert.equal(f.fast.reasonKey,'ready');
 });
 
 

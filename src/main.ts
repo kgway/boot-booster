@@ -154,7 +154,12 @@ export default class BootBooster extends Plugin {
     this.registerEvent(this.app.workspace.on('file-open',active));
     this.registerEvent(this.app.workspace.on('editor-change',()=>this.scheduler.activity(1800)));
     for(const event of ['pointerdown','keydown','wheel','touchstart'] as const)this.registerDomEvent(document,event,()=>this.scheduler.activity(1800),{passive:true});
-    this.registerDomEvent(document,'visibilitychange',()=>{this.scheduler.activity();if(document.visibilityState==='hidden')this.startup?.checkpoint();});
+    let wasHidden=document.visibilityState==='hidden';
+    this.registerDomEvent(document,'visibilitychange',()=>{
+      this.scheduler.activity();
+      if(document.visibilityState==='hidden'){wasHidden=true;this.startup?.checkpoint();}
+      else if(document.visibilityState==='visible'&&wasHidden){wasHidden=false;void this.fastStart?.refreshAfterResume().catch(()=>{});}
+    });
   }
   onunload():void{this.stopped=true;this.pluginFiles?.dispose();this.startup?.dispose();if(this.fastStart)void this.fastStart.dispose();else this.scheduler.stop();}
   setFastMode(mode:'auto'|'always'|'off'):void{try{window.localStorage.setItem(this.preferenceKey,mode);this.fastMode=mode;new Notice(this.text('nextStartup'));}catch{new Notice(this.text('settingsSaveFailed'));}}
