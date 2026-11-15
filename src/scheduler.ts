@@ -26,8 +26,8 @@ export class IdleScheduler {
     let ended=false;
     return ()=>{if(ended)return;ended=true;if(path){const operation=this.foreground.get(path);if(operation&&--operation.count===0)this.foreground.delete(path);}this.setHeld(false);};
   }
-  async idle(minQuietMs=0):Promise<void> {
-    const quietUntil=()=>Math.max(this.quietUntil,this.lastActivity+minQuietMs);
+  async idle(minQuietMs=0,quietDeadline=Infinity):Promise<void> {
+    const quietUntil=()=>Math.min(quietDeadline,Math.max(this.quietUntil,this.lastActivity+minQuietMs));
     while(!this.stopped&&!this.draining&&(!this.visible()||this.held||this.now()<quietUntil())) {
       const reason=!this.visible()?'hiddenMs':this.held?'foregroundMs':'quietMs',start=this.now();
       this.waits++;await this.sleep(80);const elapsed=Math.max(0,this.now()-start);this.timing.waitMs+=elapsed;this.timing[reason]+=elapsed;
@@ -38,13 +38,14 @@ export class IdleScheduler {
     this.timing.yieldMs+=Math.max(0,this.now()-start);this.timing.yields++;this.yieldedAt=this.now();
     if(this.stopped)throw new Error('Background scan stopped');
     // Input can arrive during the yield.
-    if(!this.draining&&(!this.visible()||this.held||this.now()<quietUntil()))return this.idle(minQuietMs);
+    if(!this.draining&&(!this.visible()||this.held||this.now()<quietUntil()))return this.idle(minQuietMs,quietDeadline);
   }
   /** Small scan batches share a 4 ms budget, rather than sleeping per folder/batch.
    * Check every boundary so input/foreground holds always take precedence. */
-  async checkpoint():Promise<void> {
+  inputGrace(ms:number):Promise<void>{return this.idle(0,this.now()+ms);}
+  async checkpoint(maxInputWait=Infinity):Promise<void> {
     if(this.stopped)throw new Error('Background scan stopped');
-    if((!this.draining&&(!this.visible()||this.held||this.now()<this.quietUntil))||this.now()-this.yieldedAt>=4)await this.idle();
+    if((!this.draining&&(!this.visible()||this.held||(maxInputWait>0&&this.now()<this.quietUntil)))||this.now()-this.yieldedAt>=4)await this.inputGrace(maxInputWait);
   }
   drain():void {this.draining=true;}
   stop():void {this.stopped=true;}

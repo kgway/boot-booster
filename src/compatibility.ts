@@ -1,6 +1,6 @@
 // These releases share the Android adapter contract inspected in the official APKs.
 // Unknown releases require device-local consent and the normal runtime guards.
-const androidAdapterVersions = new Set(['1.13.8', '1.14.4', '1.15.0']);
+const androidAdapterVersions = new Set(['1.13.8', '1.14.4', '1.15.0', '1.15.1']);
 const version=(api:unknown):api is string=>typeof api==='string'&&/^\d+\.\d+\.\d+$/.test(api);
 export const verifiedAndroidVersion = (api:string):boolean => androidAdapterVersions.has(api);
 export const supportsAndroidAdapter = (api:string,allowUnverified=false):boolean => verifiedAndroidVersion(api)||(allowUnverified&&version(api));

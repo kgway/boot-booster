@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.8
+
+- Support Android Obsidian 1.15.1 and identify Boot Booster in the unverified-version prompt.
+- Start Android file monitoring without waiting for input to stop, and let cached inventory checks make progress during continuous input.
+- Check for missed external additions, edits and deletions when returning to Obsidian after a cached startup.
+
 ## 1.14.7
 
 - Support Android Obsidian 1.15.0.

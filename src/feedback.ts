@@ -27,7 +27,7 @@ export function inventoryStatus(fast:FastStart|null,waiting:IdleScheduler['waiti
   const reason=fast.reasonKey?t(fast.reasonKey,fast.reasonArgs):fast.reason;
   if(fast.phase==='unsupported')return {...simple('normalList'),detail:reason,next:fast.reasonKey==='emptyScope'||reason.includes('対象フォルダが選択されていない')?t('noFolders'):''};
   if(fast.phase==='failed')return {...simple('failed'),detail:t('failedHelp'),next:t('recovery',{setting:t('inventorySetting'),off:t('off')})};
-  if(fast.phase==='verified')return {...simple('verified'),detail:t('verifiedCount',{count:fast.scanned.toLocaleString()})};
+  if(fast.phase==='verified')return {...simple('verified'),detail:fast.reasonKey==='refreshFailed'?reason:t('verifiedCount',{count:fast.scanned.toLocaleString()})};
   // A completed normal scan schedules a snapshot for later; it is not saved yet.
   if(fast.phase==='normal')return {...simple(fast.progress.stage==='normal-reading'?'normalReading':'normalLoaded'),detail:fast.reasonKey==='snapshotFailed'?reason:''};
   const count=t('counts',{entries:fast.scanned.toLocaleString(),folders:fast.background.directories.toLocaleString()});

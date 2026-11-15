@@ -5,6 +5,7 @@ test('1.15.0 is supported while future versions require explicit consent',()=>{
  assert.equal(supportsAndroidAdapter('1.15.0'),true);assert.equal(supportsAndroidAdapter('9.9.9'),false);assert.equal(supportsAndroidAdapter('9.9.9',true),true);
  for(const api of ['','next','1.15','1.15.0-beta','1.15.0/path'])assert.equal(supportsAndroidAdapter(api,true),false);
  assert.equal(compatibleInventory('1.14.4','1.15.0'),true);assert.equal(compatibleInventory('9.9.8','1.15.0'),false);assert.equal(compatibleInventory('1.15.0','9.9.9',true),true);
+ assert.equal(compatibleInventory('1.15.0','1.15.1'),true);
 });
 test('unknown-version prompts appear once per version and only for Android optimization',()=>{
  const s=store(),c=new CompatibilityControl('9.9.9',s,'vault');assert.equal(c.shouldPrompt(true,true),true);
@@ -12,6 +13,7 @@ test('unknown-version prompts appear once per version and only for Android optim
  assert.equal(new CompatibilityControl('9.9.9',s,'vault').shouldPrompt(true,true),false);
  assert.equal(new CompatibilityControl('9.9.10',s,'vault').shouldPrompt(true,true),true);
  assert.equal(c.allowed,false);assert.equal(new CompatibilityControl('1.15.0',s,'vault').shouldPrompt(true,true),false);
+ const updated=new CompatibilityControl('1.15.1',s,'vault');assert.equal(updated.policy,'verified');assert.equal(updated.shouldPrompt(true,true),false);
 });
 test('accepting one version does not opt another version or device into unknown versions',()=>{
  const s=store(),c=new CompatibilityControl('9.9.9',s,'one');c.accept();assert.equal(c.policy,'accepted');
